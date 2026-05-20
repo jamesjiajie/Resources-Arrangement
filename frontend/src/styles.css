@@ -230,7 +230,8 @@ label {
 }
 
 .icon-button,
-.square-button {
+.square-button,
+.language-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -244,8 +245,15 @@ label {
 }
 
 .icon-button:hover,
-.square-button:hover {
+.square-button:hover,
+.language-toggle:hover {
   border-color: var(--primary);
+}
+
+.language-toggle {
+  width: 74px;
+  align-self: end;
+  font-weight: 750;
 }
 
 .icon-button.primary {
