@@ -98,8 +98,6 @@ def init_db():
             );
             """
         )
-        if conn.execute("SELECT COUNT(*) FROM members").fetchone()[0] == 0:
-            seed_data(conn)
 
 
 def seed_data(conn: sqlite3.Connection):

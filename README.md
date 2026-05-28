@@ -22,19 +22,11 @@ npm install
 
 ## 开发启动
 
-终端 1 启动后端：
-
-```bash
-npm run api
-```
-
-终端 2 启动前端：
-
 ```bash
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173`。
+打开 `http://127.0.0.1:8000`。网页和 API 都由 FastAPI 提供。
 
 ## 生产构建与启动
 
