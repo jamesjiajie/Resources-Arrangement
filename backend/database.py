@@ -88,6 +88,22 @@ def init_db():
                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS import_batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL,
+                sheet_name TEXT NOT NULL,
+                resource_month TEXT NOT NULL,
+                file_hash TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                created_members INTEGER NOT NULL DEFAULT 0,
+                reused_members INTEGER NOT NULL DEFAULT 0,
+                created_projects INTEGER NOT NULL DEFAULT 0,
+                reused_projects INTEGER NOT NULL DEFAULT 0,
+                created_assignments INTEGER NOT NULL DEFAULT 0,
+                skipped_assignments INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS activity_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 entity_type TEXT NOT NULL,
@@ -98,6 +114,15 @@ def init_db():
             );
             """
         )
+        ensure_column(conn, "assignments", "import_batch_id", "INTEGER")
+        ensure_column(conn, "assignments", "source_key", "TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "assignments", "source_type", "TEXT NOT NULL DEFAULT 'manual'")
+
+
+def ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, definition: str):
+    columns = [row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()]
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
 
 def seed_data(conn: sqlite3.Connection):

@@ -11,6 +11,7 @@
 - 负载提醒：低占用、正常、接近满载、超负载、有阻塞
 - 项目占用：按项目汇总参与人数和资源占用
 - 变更记录：新增、编辑、删除会写入活动日志
+- Excel 导入：上传日常资源安排表，先预览人员、项目和 FTE 安排，再选择追加、替换同月份导入记录或更新基础资料后写入
 
 ## 安装
 
@@ -42,6 +43,7 @@ python server.py
 - `backend/main.py`：FastAPI 应用、路由、静态页面托管
 - `backend/database.py`：SQLite 连接、初始化、示例数据
 - `backend/services.py`：数据读写和汇总逻辑
+- `backend/excel_import.py`：Excel 资源安排表解析逻辑
 - `backend/schemas.py`：Pydantic 请求校验
 - `frontend/src/App.vue`：Vue 工作台主界面
 - `frontend/src/styles.css`：界面样式

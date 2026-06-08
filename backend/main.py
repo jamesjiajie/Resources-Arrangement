@@ -1,20 +1,24 @@
 import sqlite3
 from pathlib import Path
 from typing import Optional
+from urllib.parse import unquote
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import BASE_DIR, get_db, init_db
+from .excel_import import parse_resource_workbook
 from .schemas import AssignmentIn, MemberIn, ProjectIn
 from .services import (
+    apply_excel_import,
     build_overview,
     create_assignment,
     create_member,
     create_project,
     delete_entity,
+    list_import_batches,
     update_assignment,
 )
 
@@ -44,6 +48,41 @@ def health():
 def overview(date: Optional[str] = None):
     with get_db() as conn:
         return build_overview(conn, date)
+
+
+@app.get("/api/imports")
+def imports():
+    with get_db() as conn:
+        return {"imports": list_import_batches(conn)}
+
+
+@app.post("/api/imports/excel/preview")
+async def preview_excel_import(request: Request):
+    filename = unquote(request.headers.get("x-filename", "uploaded.xlsx"))
+    content = await request.body()
+    if not content:
+        raise HTTPException(status_code=400, detail="请上传 Excel 文件")
+    try:
+        return parse_resource_workbook(content, filename)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Excel 解析失败: {exc}")
+
+
+@app.post("/api/imports/excel/apply")
+async def apply_excel_import_route(request: Request, mode: str = "replace_month"):
+    filename = unquote(request.headers.get("x-filename", "uploaded.xlsx"))
+    content = await request.body()
+    if not content:
+        raise HTTPException(status_code=400, detail="请上传 Excel 文件")
+    try:
+        preview = parse_resource_workbook(content, filename)
+        with get_db() as conn:
+            result = apply_excel_import(conn, preview, mode)
+        return {"ok": True, "result": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Excel 导入失败: {exc}")
 
 
 @app.post("/api/members", status_code=201)

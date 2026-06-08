@@ -217,6 +217,185 @@ def create_assignment(conn: sqlite3.Connection, payload: AssignmentIn):
     return cur.lastrowid
 
 
+def find_by_name(conn: sqlite3.Connection, table_name: str, name: str):
+    return conn.execute(
+        f"SELECT * FROM {table_name} WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1",
+        (name,),
+    ).fetchone()
+
+
+def update_member_from_import(conn: sqlite3.Connection, member_id: int, member: dict):
+    existing = conn.execute("SELECT * FROM members WHERE id = ?", (member_id,)).fetchone()
+    role = existing["role"] or member["role"]
+    team = existing["team"] or member["team"]
+    notes = existing["notes"]
+    if member["notes"] and member["notes"] not in notes:
+        notes = (notes + "\n" if notes else "") + member["notes"]
+    conn.execute(
+        """
+        UPDATE members
+        SET role = ?, team = ?, status = ?, notes = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (role, team, member["status"], notes, now_iso(), member_id),
+    )
+
+
+def update_project_from_import(conn: sqlite3.Connection, project_id: int, project: dict):
+    existing = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    owner = existing["owner"] or project["owner"]
+    notes = existing["notes"]
+    if project["notes"] and project["notes"] not in notes:
+        notes = (notes + "\n" if notes else "") + project["notes"]
+    conn.execute(
+        """
+        UPDATE projects
+        SET owner = ?, start_date = COALESCE(start_date, ?), end_date = COALESCE(end_date, ?),
+            notes = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (owner, project["start_date"], project["end_date"], notes, now_iso(), project_id),
+    )
+
+
+def create_import_batch(conn: sqlite3.Connection, preview: dict, mode: str, stats: dict):
+    cur = conn.execute(
+        """
+        INSERT INTO import_batches
+        (filename, sheet_name, resource_month, file_hash, mode, created_members, reused_members,
+         created_projects, reused_projects, created_assignments, skipped_assignments, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            preview["filename"],
+            preview["sheet_name"],
+            preview["resource_month"],
+            preview["file_hash"],
+            mode,
+            stats["created_members"],
+            stats["reused_members"],
+            stats["created_projects"],
+            stats["reused_projects"],
+            stats["created_assignments"],
+            stats["skipped_assignments"],
+            now_iso(),
+        ),
+    )
+    return cur.lastrowid
+
+
+def list_import_batches(conn: sqlite3.Connection):
+    return fetch_all(conn, "SELECT * FROM import_batches ORDER BY id DESC LIMIT 30")
+
+
+def apply_excel_import(conn: sqlite3.Connection, preview: dict, mode: str):
+    if mode not in ("append", "replace_month", "update_catalog"):
+        raise ValueError("未知导入模式")
+
+    if mode in ("replace_month", "update_catalog"):
+        conn.execute(
+            """
+            DELETE FROM assignments
+            WHERE source_type = 'excel'
+              AND import_batch_id IN (
+                SELECT id FROM import_batches WHERE resource_month = ?
+              )
+            """,
+            (preview["resource_month"],),
+        )
+
+    stats = {
+        "created_members": 0,
+        "reused_members": 0,
+        "created_projects": 0,
+        "reused_projects": 0,
+        "created_assignments": 0,
+        "skipped_assignments": 0,
+    }
+
+    member_ids = {}
+    for member in preview["members"]:
+        existing = find_by_name(conn, "members", member["name"])
+        if existing:
+            member_ids[member["name"]] = existing["id"]
+            stats["reused_members"] += 1
+            if mode == "update_catalog":
+                update_member_from_import(conn, existing["id"], member)
+            continue
+        payload = MemberIn(**{key: member[key] for key in ("name", "role", "team", "capacity_hours_week", "status", "notes")})
+        member_ids[member["name"]] = create_member(conn, payload)
+        stats["created_members"] += 1
+
+    project_ids = {}
+    for project in preview["projects"]:
+        existing = find_by_name(conn, "projects", project["name"])
+        if existing:
+            project_ids[project["name"]] = existing["id"]
+            stats["reused_projects"] += 1
+            if mode == "update_catalog":
+                update_project_from_import(conn, existing["id"], project)
+            continue
+        payload = ProjectIn(
+            **{
+                key: project[key]
+                for key in ("name", "code", "owner", "status", "priority", "start_date", "end_date", "notes")
+            }
+        )
+        project_ids[project["name"]] = create_project(conn, payload)
+        stats["created_projects"] += 1
+
+    batch_id = create_import_batch(conn, preview, mode, stats)
+    timestamp = now_iso()
+
+    for assignment in preview["assignments"]:
+        member_id = member_ids.get(assignment["member_name"])
+        project_id = project_ids.get(assignment["project_name"])
+        if not member_id or not project_id:
+            stats["skipped_assignments"] += 1
+            continue
+        conn.execute(
+            """
+            INSERT INTO assignments
+            (member_id, project_id, task_name, allocation_percent, start_date, end_date,
+             status, priority, notes, created_at, updated_at, import_batch_id, source_key, source_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'excel')
+            """,
+            (
+                member_id,
+                project_id,
+                assignment["task_name"],
+                assignment["allocation_percent"],
+                assignment["start_date"],
+                assignment["end_date"],
+                assignment["status"],
+                assignment["priority"],
+                assignment["notes"],
+                timestamp,
+                timestamp,
+                batch_id,
+                assignment["source_key"],
+            ),
+        )
+        stats["created_assignments"] += 1
+
+    conn.execute(
+        """
+        UPDATE import_batches
+        SET created_assignments = ?, skipped_assignments = ?
+        WHERE id = ?
+        """,
+        (stats["created_assignments"], stats["skipped_assignments"], batch_id),
+    )
+    log_activity(
+        conn,
+        "import",
+        batch_id,
+        "excel",
+        f"导入 Excel: {preview['filename']} / {preview['sheet_name']}，生成 {stats['created_assignments']} 条安排",
+    )
+    return {"batch_id": batch_id, **stats}
+
+
 def update_assignment(conn: sqlite3.Connection, assignment_id: int, payload: AssignmentIn):
     data = payload.model_dump()
     cur = conn.execute(

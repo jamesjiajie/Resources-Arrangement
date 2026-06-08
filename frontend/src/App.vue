@@ -409,6 +409,119 @@
           </article>
         </div>
       </section>
+
+      <section v-if="view === 'imports'" class="work-view">
+        <section class="form-panel">
+          <div class="section-title compact">
+            <div>
+              <h2>{{ t.excelImportTitle }}</h2>
+              <p>{{ t.excelImportDescription }}</p>
+            </div>
+          </div>
+
+          <div class="import-layout">
+            <label class="file-picker">
+              <span>{{ t.excelFile }}</span>
+              <input type="file" accept=".xlsx" @change="handleImportFile" />
+            </label>
+            <label>
+              <span>{{ t.importMode }}</span>
+              <select v-model="importMode">
+                <option value="append">{{ t.importAppend }}</option>
+                <option value="replace_month">{{ t.importReplaceMonth }}</option>
+                <option value="update_catalog">{{ t.importUpdateCatalog }}</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button class="icon-button primary" type="button" :disabled="!importFile || importing" @click="previewImport">
+              <FileUp :size="18" />
+              <span>{{ importing ? t.importWorking : t.previewImport }}</span>
+            </button>
+            <button class="icon-button" type="button" :disabled="!importPreview || importing" @click="applyImport">
+              <Save :size="18" />
+              <span>{{ t.applyImport }}</span>
+            </button>
+          </div>
+        </section>
+
+        <section v-if="importPreview" class="section-block">
+          <div class="section-title">
+            <div>
+              <h2>{{ t.importPreview }}</h2>
+              <p>{{ importPreview.filename }} · {{ importPreview.sheet_name }} · {{ importPreview.resource_month }}</p>
+            </div>
+          </div>
+          <div class="metric-grid import-metrics">
+            <article class="metric">
+              <Users :size="20" />
+              <span>{{ t.members }}</span>
+              <strong>{{ importPreview.stats.member_count }}</strong>
+            </article>
+            <article class="metric">
+              <FolderKanban :size="20" />
+              <span>{{ t.projects }}</span>
+              <strong>{{ importPreview.stats.project_count }}</strong>
+            </article>
+            <article class="metric">
+              <CalendarRange :size="20" />
+              <span>{{ t.assignments }}</span>
+              <strong>{{ importPreview.stats.assignment_count }}</strong>
+            </article>
+            <article class="metric">
+              <AlertTriangle :size="20" />
+              <span>{{ t.importIssues }}</span>
+              <strong>{{ importPreview.stats.issue_count }}</strong>
+            </article>
+          </div>
+
+          <div v-if="importPreview.issues.length" class="issue-list">
+            <article v-for="issue in importPreview.issues" :key="`${issue.row}-${issue.message}`">
+              <strong>{{ issue.row ? `Row ${issue.row}` : issue.level }}</strong>
+              <span>{{ issue.message }}</span>
+            </article>
+          </div>
+
+          <div class="table-wrap">
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>{{ t.sourceRow }}</th>
+                  <th>{{ t.member }}</th>
+                  <th>{{ t.project }}</th>
+                  <th>{{ t.task }}</th>
+                  <th>{{ t.stage }}</th>
+                  <th>{{ t.allocation }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in previewAssignments" :key="item.source_key">
+                  <td>{{ item.row }}</td>
+                  <td>{{ item.member_name }}</td>
+                  <td>{{ item.project_name }}</td>
+                  <td>{{ item.task_name }}</td>
+                  <td>{{ item.stage }}</td>
+                  <td>{{ item.allocation_percent }}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section v-if="importResult" class="section-block">
+          <div class="section-title compact">
+            <div>
+              <h2>{{ t.importComplete }}</h2>
+              <p>
+                {{ t.importCreatedAssignments }} {{ importResult.created_assignments }} ·
+                {{ t.importCreatedMembers }} {{ importResult.created_members }} ·
+                {{ t.importCreatedProjects }} {{ importResult.created_projects }}
+              </p>
+            </div>
+          </div>
+        </section>
+      </section>
     </main>
   </div>
 </template>
@@ -419,6 +532,7 @@ import AlertTriangle from "@lucide/vue/dist/esm/icons/triangle-alert.mjs";
 import BarChart3 from "@lucide/vue/dist/esm/icons/chart-bar.mjs";
 import BriefcaseBusiness from "@lucide/vue/dist/esm/icons/briefcase-business.mjs";
 import CalendarRange from "@lucide/vue/dist/esm/icons/calendar-range.mjs";
+import FileUp from "@lucide/vue/dist/esm/icons/file-up.mjs";
 import FolderKanban from "@lucide/vue/dist/esm/icons/folder-kanban.mjs";
 import FolderPlus from "@lucide/vue/dist/esm/icons/folder-plus.mjs";
 import Gauge from "@lucide/vue/dist/esm/icons/gauge.mjs";
@@ -441,6 +555,11 @@ const error = ref("");
 const search = ref("");
 const statusFilter = ref("");
 const editingAssignmentId = ref(null);
+const importFile = ref(null);
+const importPreview = ref(null);
+const importMode = ref("replace_month");
+const importResult = ref(null);
+const importing = ref(false);
 
 const stats = ref({});
 const members = ref([]);
@@ -466,6 +585,7 @@ const translations = {
     assignments: "安排",
     members: "同事",
     projects: "项目",
+    imports: "导入",
     dashboardTitle: "资源总览",
     assignmentsTitle: "任务安排",
     membersTitle: "团队同事",
@@ -542,6 +662,24 @@ const translations = {
     notSet: "未定",
     requestFailed: "请求失败",
     deleteConfirm: "确认删除这条记录？关联数据可能会一起删除。",
+    excelImportTitle: "Excel 导入",
+    excelImportDescription: "上传资源安排表，先预览人员、项目和安排，再确认写入 portal。",
+    excelFile: "Excel 文件",
+    importMode: "导入模式",
+    importAppend: "追加导入",
+    importReplaceMonth: "替换同月份导入记录",
+    importUpdateCatalog: "更新人员/项目并替换安排",
+    previewImport: "解析预览",
+    applyImport: "确认导入",
+    importWorking: "处理中",
+    importPreview: "导入预览",
+    importIssues: "提示",
+    sourceRow: "来源行",
+    stage: "阶段",
+    importComplete: "导入完成",
+    importCreatedAssignments: "新增安排",
+    importCreatedMembers: "新增同事",
+    importCreatedProjects: "新增项目",
     risks: {
       blocked: "有阻塞",
       overloaded: "超负载",
@@ -588,6 +726,7 @@ const translations = {
     assignments: "Assignments",
     members: "Members",
     projects: "Projects",
+    imports: "Import",
     dashboardTitle: "Resource Overview",
     assignmentsTitle: "Task Assignments",
     membersTitle: "Team Members",
@@ -664,6 +803,24 @@ const translations = {
     notSet: "Not set",
     requestFailed: "Request failed",
     deleteConfirm: "Delete this record? Related data may also be removed.",
+    excelImportTitle: "Excel Import",
+    excelImportDescription: "Upload the resource workbook, preview people, projects, and assignments, then apply it to the portal.",
+    excelFile: "Excel file",
+    importMode: "Import mode",
+    importAppend: "Append import",
+    importReplaceMonth: "Replace same-month imports",
+    importUpdateCatalog: "Update catalog and replace assignments",
+    previewImport: "Preview Import",
+    applyImport: "Apply Import",
+    importWorking: "Working",
+    importPreview: "Import Preview",
+    importIssues: "Issues",
+    sourceRow: "Source row",
+    stage: "Stage",
+    importComplete: "Import Complete",
+    importCreatedAssignments: "Created assignments",
+    importCreatedMembers: "Created members",
+    importCreatedProjects: "Created projects",
     risks: {
       blocked: "Blocked",
       overloaded: "Overloaded",
@@ -704,6 +861,7 @@ const navigation = computed(() => [
   { id: "assignments", label: t.value.assignments, icon: CalendarRange },
   { id: "members", label: t.value.members, icon: Users },
   { id: "projects", label: t.value.projects, icon: FolderKanban },
+  { id: "imports", label: t.value.imports, icon: FileUp },
 ]);
 
 const memberForm = reactive({
@@ -734,6 +892,7 @@ const viewTitle = computed(() => {
     assignments: t.value.assignmentsTitle,
     members: t.value.membersTitle,
     projects: t.value.projectsTitle,
+    imports: t.value.excelImportTitle,
   }[view.value];
 });
 
@@ -762,6 +921,10 @@ const filteredAssignments = computed(() => {
     const text = `${item.member_name} ${item.project_name} ${item.task_name}`.toLowerCase();
     return (!needle || text.includes(needle)) && (!statusFilter.value || item.status === statusFilter.value);
   });
+});
+
+const previewAssignments = computed(() => {
+  return importPreview.value ? importPreview.value.assignments.slice(0, 20) : [];
 });
 
 function defaultAssignmentForm() {
@@ -796,6 +959,26 @@ async function request(path, options = {}) {
   return body;
 }
 
+async function uploadExcel(path) {
+  if (!importFile.value) {
+    throw new Error(t.value.excelFile);
+  }
+  error.value = "";
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "X-Filename": encodeURIComponent(importFile.value.name),
+    },
+    body: await importFile.value.arrayBuffer(),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.detail || body.error || t.value.requestFailed);
+  }
+  return body;
+}
+
 async function loadData() {
   try {
     const data = await request(`/api/overview?date=${currentDate.value}`);
@@ -808,6 +991,40 @@ async function loadData() {
     activity.value = data.activity;
   } catch (err) {
     error.value = err.message;
+  }
+}
+
+function handleImportFile(event) {
+  importFile.value = event.target.files?.[0] || null;
+  importPreview.value = null;
+  importResult.value = null;
+}
+
+async function previewImport() {
+  try {
+    importing.value = true;
+    importResult.value = null;
+    importPreview.value = await uploadExcel("/api/imports/excel/preview");
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    importing.value = false;
+  }
+}
+
+async function applyImport() {
+  if (!importPreview.value) {
+    return;
+  }
+  try {
+    importing.value = true;
+    const data = await uploadExcel(`/api/imports/excel/apply?mode=${importMode.value}`);
+    importResult.value = data.result;
+    await loadData();
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    importing.value = false;
   }
 }
 

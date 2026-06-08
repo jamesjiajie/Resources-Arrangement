@@ -40,6 +40,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 input,
 select,
 textarea {
@@ -467,6 +472,45 @@ label {
   margin-top: 16px;
 }
 
+.import-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(240px, 0.6fr);
+  gap: 14px;
+}
+
+.file-picker input {
+  padding-top: 8px;
+}
+
+.import-metrics {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.issue-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.issue-list article {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid #f0d6a8;
+  border-radius: 8px;
+  background: #fff8ed;
+  color: var(--yellow);
+  padding: 10px 12px;
+}
+
+.issue-list span {
+  color: var(--ink);
+}
+
+.preview-table td {
+  vertical-align: top;
+}
+
 .filters {
   display: flex;
   align-items: center;
@@ -618,6 +662,7 @@ td span {
   }
 
   .dashboard-split,
+  .import-layout,
   .form-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -643,7 +688,7 @@ td span {
 
   .nav-list {
     grid-auto-flow: row;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .nav-list button {
@@ -656,8 +701,10 @@ td span {
   }
 
   .metric-grid,
+  .import-metrics,
   .load-grid,
   .dashboard-split,
+  .import-layout,
   .form-grid,
   .entity-grid {
     grid-template-columns: 1fr;
