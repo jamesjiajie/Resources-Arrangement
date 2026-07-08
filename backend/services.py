@@ -1,7 +1,7 @@
 import sqlite3
 
 from .database import fetch_all, log_activity, now_iso, today_iso
-from .schemas import AssignmentIn, MemberIn, ProjectIn
+from .schemas import AssignmentIn, LongTermTaskIn, MemberIn, ProjectIn
 
 
 def is_current_assignment(assignment, current_date: str) -> bool:
@@ -286,6 +286,82 @@ def create_import_batch(conn: sqlite3.Connection, preview: dict, mode: str, stat
 
 def list_import_batches(conn: sqlite3.Connection):
     return fetch_all(conn, "SELECT * FROM import_batches ORDER BY id DESC LIMIT 30")
+
+
+def list_long_term_tasks(conn: sqlite3.Connection):
+    return fetch_all(
+        conn,
+        """
+        SELECT * FROM long_term_tasks
+        ORDER BY
+            CASE status
+                WHEN 'blocked' THEN 0
+                WHEN 'active' THEN 1
+                WHEN 'planned' THEN 2
+                WHEN 'done' THEN 3
+                ELSE 4
+            END,
+            COALESCE(target_date, '9999-12-31'),
+            CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+            updated_at DESC
+        """,
+    )
+
+
+def create_long_term_task(conn: sqlite3.Connection, payload: LongTermTaskIn):
+    data = payload.model_dump()
+    timestamp = now_iso()
+    cur = conn.execute(
+        """
+        INSERT INTO long_term_tasks
+        (title, owner, category, status, priority, progress, start_date, target_date, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["title"].strip(),
+            data["owner"].strip(),
+            data["category"].strip(),
+            data["status"],
+            data["priority"],
+            data["progress"],
+            data["start_date"] or None,
+            data["target_date"] or None,
+            data["notes"].strip(),
+            timestamp,
+            timestamp,
+        ),
+    )
+    log_activity(conn, "long_term_task", cur.lastrowid, "create", "新增长期任务: " + data["title"].strip())
+    return cur.lastrowid
+
+
+def update_long_term_task(conn: sqlite3.Connection, task_id: int, payload: LongTermTaskIn):
+    data = payload.model_dump()
+    cur = conn.execute(
+        """
+        UPDATE long_term_tasks
+        SET title = ?, owner = ?, category = ?, status = ?, priority = ?, progress = ?,
+            start_date = ?, target_date = ?, notes = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            data["title"].strip(),
+            data["owner"].strip(),
+            data["category"].strip(),
+            data["status"],
+            data["priority"],
+            data["progress"],
+            data["start_date"] or None,
+            data["target_date"] or None,
+            data["notes"].strip(),
+            now_iso(),
+            task_id,
+        ),
+    )
+    if cur.rowcount == 0:
+        return False
+    log_activity(conn, "long_term_task", task_id, "update", "更新长期任务: " + data["title"].strip())
+    return True
 
 
 def apply_excel_import(conn: sqlite3.Connection, preview: dict, mode: str):

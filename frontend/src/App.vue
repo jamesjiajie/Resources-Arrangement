@@ -410,6 +410,155 @@
         </div>
       </section>
 
+      <section v-if="view === 'tasks'" class="work-view">
+        <div class="metric-grid task-metrics">
+          <article v-for="metric in taskMetrics" :key="metric.label" class="metric">
+            <component :is="metric.icon" :size="20" />
+            <span>{{ metric.label }}</span>
+            <strong>{{ metric.value }}</strong>
+          </article>
+        </div>
+
+        <form class="form-panel" @submit.prevent="saveLongTermTask">
+          <div class="section-title compact">
+            <div>
+              <h2>{{ editingTaskId ? t.editLongTermTask : t.newLongTermTask }}</h2>
+              <p>{{ t.longTermTaskFormDescription }}</p>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label class="span-2">
+              <span>{{ t.taskTitle }}</span>
+              <input v-model.trim="taskForm.title" required :placeholder="t.taskTitlePlaceholder" />
+            </label>
+            <label>
+              <span>{{ t.owner }}</span>
+              <input v-model.trim="taskForm.owner" :placeholder="t.ownerPlaceholder" />
+            </label>
+            <label>
+              <span>{{ t.category }}</span>
+              <input v-model.trim="taskForm.category" :placeholder="t.categoryPlaceholder" />
+            </label>
+            <label>
+              <span>{{ t.status }}</span>
+              <select v-model="taskForm.status">
+                <option value="planned">{{ t.planned }}</option>
+                <option value="active">{{ t.active }}</option>
+                <option value="blocked">{{ t.blocked }}</option>
+                <option value="done">{{ t.done }}</option>
+                <option value="archived">{{ t.archived }}</option>
+              </select>
+            </label>
+            <label>
+              <span>{{ t.priority }}</span>
+              <select v-model="taskForm.priority">
+                <option value="high">{{ t.high }}</option>
+                <option value="medium">{{ t.medium }}</option>
+                <option value="low">{{ t.low }}</option>
+              </select>
+            </label>
+            <label>
+              <span>{{ t.progress }}</span>
+              <input v-model.number="taskForm.progress" type="number" min="0" max="100" />
+            </label>
+            <label>
+              <span>{{ t.startDate }}</span>
+              <input v-model="taskForm.start_date" type="date" />
+            </label>
+            <label>
+              <span>{{ t.targetDate }}</span>
+              <input v-model="taskForm.target_date" type="date" />
+            </label>
+            <label class="span-2">
+              <span>{{ t.notes }}</span>
+              <textarea v-model.trim="taskForm.notes" rows="3"></textarea>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button class="icon-button primary" type="submit">
+              <Save :size="18" />
+              <span>{{ editingTaskId ? t.saveChanges : t.newLongTermTask }}</span>
+            </button>
+            <button class="icon-button" type="button" @click="resetTaskForm">
+              <RotateCcw :size="18" />
+              <span>{{ t.clear }}</span>
+            </button>
+          </div>
+        </form>
+
+        <section class="table-panel">
+          <div class="section-title compact">
+            <div>
+              <h2>{{ t.longTermTaskList }}</h2>
+              <p>{{ t.longTermTaskListDescription }}</p>
+            </div>
+            <div class="filters">
+              <div class="search-box">
+                <Search :size="17" />
+                <input v-model.trim="taskSearch" :placeholder="t.taskSearchPlaceholder" />
+              </div>
+              <select v-model="taskStatusFilter">
+                <option value="">{{ t.allStatuses }}</option>
+                <option value="planned">{{ t.planned }}</option>
+                <option value="active">{{ t.active }}</option>
+                <option value="blocked">{{ t.blocked }}</option>
+                <option value="done">{{ t.done }}</option>
+                <option value="archived">{{ t.archived }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{{ t.task }}</th>
+                  <th>{{ t.owner }}</th>
+                  <th>{{ t.status }}</th>
+                  <th>{{ t.priority }}</th>
+                  <th>{{ t.progress }}</th>
+                  <th>{{ t.period }}</th>
+                  <th>{{ t.actions }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in filteredLongTermTasks" :key="item.id">
+                  <td>
+                    <strong>{{ item.title }}</strong>
+                    <span>{{ item.category || t.noCategory }}</span>
+                  </td>
+                  <td>{{ item.owner || t.noOwner }}</td>
+                  <td><span class="status-pill" :class="item.status">{{ statusLabel(item.status) }}</span></td>
+                  <td>{{ priorityLabel(item.priority) }}</td>
+                  <td>
+                    <div class="progress-cell">
+                      <div class="capacity-bar">
+                        <i :style="{ width: bounded(item.progress) + '%' }"></i>
+                      </div>
+                      <b>{{ item.progress }}%</b>
+                    </div>
+                  </td>
+                  <td>{{ item.start_date || t.notSet }} - {{ item.target_date || t.ongoing }}</td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="square-button" type="button" :title="t.edit" @click="editLongTermTask(item)">
+                        <Pencil :size="17" />
+                      </button>
+                      <button class="square-button" type="button" :title="t.markDone" @click="completeLongTermTask(item)">
+                        <Check :size="17" />
+                      </button>
+                      <button class="square-button danger" type="button" :title="t.delete" @click="removeLongTermTask(item.id)">
+                        <Trash2 :size="17" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
       <section v-if="view === 'imports'" class="work-view">
         <section class="form-panel">
           <div class="section-title compact">
@@ -532,11 +681,13 @@ import AlertTriangle from "@lucide/vue/dist/esm/icons/triangle-alert.mjs";
 import BarChart3 from "@lucide/vue/dist/esm/icons/chart-bar.mjs";
 import BriefcaseBusiness from "@lucide/vue/dist/esm/icons/briefcase-business.mjs";
 import CalendarRange from "@lucide/vue/dist/esm/icons/calendar-range.mjs";
+import Check from "@lucide/vue/dist/esm/icons/check.mjs";
 import FileUp from "@lucide/vue/dist/esm/icons/file-up.mjs";
 import FolderKanban from "@lucide/vue/dist/esm/icons/folder-kanban.mjs";
 import FolderPlus from "@lucide/vue/dist/esm/icons/folder-plus.mjs";
 import Gauge from "@lucide/vue/dist/esm/icons/gauge.mjs";
 import Languages from "@lucide/vue/dist/esm/icons/languages.mjs";
+import ListChecks from "@lucide/vue/dist/esm/icons/list-checks.mjs";
 import Pencil from "@lucide/vue/dist/esm/icons/pencil.mjs";
 import RefreshCw from "@lucide/vue/dist/esm/icons/refresh-cw.mjs";
 import RotateCcw from "@lucide/vue/dist/esm/icons/rotate-ccw.mjs";
@@ -554,7 +705,10 @@ const currentDate = ref(today);
 const error = ref("");
 const search = ref("");
 const statusFilter = ref("");
+const taskSearch = ref("");
+const taskStatusFilter = ref("");
 const editingAssignmentId = ref(null);
+const editingTaskId = ref(null);
 const importFile = ref(null);
 const importPreview = ref(null);
 const importMode = ref("replace_month");
@@ -565,6 +719,7 @@ const stats = ref({});
 const members = ref([]);
 const projects = ref([]);
 const assignments = ref([]);
+const longTermTasks = ref([]);
 const memberLoad = ref([]);
 const projectLoad = ref([]);
 const activity = ref([]);
@@ -585,11 +740,13 @@ const translations = {
     assignments: "安排",
     members: "同事",
     projects: "项目",
+    tasks: "任务管理",
     imports: "导入",
     dashboardTitle: "资源总览",
     assignmentsTitle: "任务安排",
     membersTitle: "团队同事",
     projectsTitle: "项目组合",
+    tasksTitle: "长期任务管理",
     memberMetric: "同事",
     activeProjectsMetric: "进行中项目",
     activeAssignmentsMetric: "进行中安排",
@@ -626,8 +783,11 @@ const translations = {
     blocked: "阻塞",
     done: "完成",
     paused: "暂停",
+    archived: "已归档",
     startDate: "开始日期",
     endDate: "结束日期",
+    targetDate: "目标日期",
+    progress: "进度",
     notes: "备注",
     saveChanges: "保存修改",
     clear: "清空",
@@ -659,7 +819,24 @@ const translations = {
     owner: "负责人",
     planning: "规划中",
     noOwner: "未指定负责人",
+    ownerPlaceholder: "例如：赵宁",
     notSet: "未定",
+    category: "分类",
+    categoryPlaceholder: "例如：技术债 / 流程改进",
+    noCategory: "未分类",
+    taskTitle: "任务标题",
+    taskTitlePlaceholder: "例如：建立季度资源预测机制",
+    editLongTermTask: "编辑长期任务",
+    newLongTermTask: "新增长期任务",
+    longTermTaskFormDescription: "跟踪跨周或跨月推进的事项，不计入短期资源占用。",
+    longTermTaskList: "长期任务列表",
+    longTermTaskListDescription: "按状态、负责人、分类和标题查找长期事项。",
+    taskSearchPlaceholder: "搜索任务、负责人、分类",
+    markDone: "标记完成",
+    longTermActiveMetric: "进行中任务",
+    longTermBlockedMetric: "阻塞任务",
+    longTermDueMetric: "7 天内到期",
+    longTermDoneMetric: "已完成",
     requestFailed: "请求失败",
     deleteConfirm: "确认删除这条记录？关联数据可能会一起删除。",
     excelImportTitle: "Excel 导入",
@@ -693,6 +870,7 @@ const translations = {
       blocked: "阻塞",
       done: "完成",
       paused: "暂停",
+      archived: "已归档",
     },
     memberStatuses: {
       available: "可安排",
@@ -726,11 +904,13 @@ const translations = {
     assignments: "Assignments",
     members: "Members",
     projects: "Projects",
+    tasks: "Tasks",
     imports: "Import",
     dashboardTitle: "Resource Overview",
     assignmentsTitle: "Task Assignments",
     membersTitle: "Team Members",
     projectsTitle: "Project Portfolio",
+    tasksTitle: "Long-Term Task Management",
     memberMetric: "Members",
     activeProjectsMetric: "Active Projects",
     activeAssignmentsMetric: "Active Assignments",
@@ -767,8 +947,11 @@ const translations = {
     blocked: "Blocked",
     done: "Done",
     paused: "Paused",
+    archived: "Archived",
     startDate: "Start date",
     endDate: "End date",
+    targetDate: "Target date",
+    progress: "Progress",
     notes: "Notes",
     saveChanges: "Save Changes",
     clear: "Clear",
@@ -800,7 +983,24 @@ const translations = {
     owner: "Owner",
     planning: "Planning",
     noOwner: "No owner",
+    ownerPlaceholder: "Example: Ning Zhao",
     notSet: "Not set",
+    category: "Category",
+    categoryPlaceholder: "Example: Tech debt / Process",
+    noCategory: "No category",
+    taskTitle: "Task title",
+    taskTitlePlaceholder: "Example: Build quarterly capacity forecast",
+    editLongTermTask: "Edit Long-Term Task",
+    newLongTermTask: "New Long-Term Task",
+    longTermTaskFormDescription: "Track work that runs across weeks or months without adding short-term allocation.",
+    longTermTaskList: "Long-Term Task List",
+    longTermTaskListDescription: "Find long-running work by status, owner, category, or title.",
+    taskSearchPlaceholder: "Search task, owner, category",
+    markDone: "Mark Done",
+    longTermActiveMetric: "Active Tasks",
+    longTermBlockedMetric: "Blocked Tasks",
+    longTermDueMetric: "Due in 7 Days",
+    longTermDoneMetric: "Done",
     requestFailed: "Request failed",
     deleteConfirm: "Delete this record? Related data may also be removed.",
     excelImportTitle: "Excel Import",
@@ -834,6 +1034,7 @@ const translations = {
       blocked: "Blocked",
       done: "Done",
       paused: "Paused",
+      archived: "Archived",
     },
     memberStatuses: {
       available: "Available",
@@ -861,6 +1062,7 @@ const navigation = computed(() => [
   { id: "assignments", label: t.value.assignments, icon: CalendarRange },
   { id: "members", label: t.value.members, icon: Users },
   { id: "projects", label: t.value.projects, icon: FolderKanban },
+  { id: "tasks", label: t.value.tasks, icon: ListChecks },
   { id: "imports", label: t.value.imports, icon: FileUp },
 ]);
 
@@ -885,6 +1087,7 @@ const projectForm = reactive({
 });
 
 const assignmentForm = reactive(defaultAssignmentForm());
+const taskForm = reactive(defaultTaskForm());
 
 const viewTitle = computed(() => {
   return {
@@ -892,6 +1095,7 @@ const viewTitle = computed(() => {
     assignments: t.value.assignmentsTitle,
     members: t.value.membersTitle,
     projects: t.value.projectsTitle,
+    tasks: t.value.tasksTitle,
     imports: t.value.excelImportTitle,
   }[view.value];
 });
@@ -923,6 +1127,33 @@ const filteredAssignments = computed(() => {
   });
 });
 
+const filteredLongTermTasks = computed(() => {
+  const needle = taskSearch.value.toLowerCase();
+  return longTermTasks.value.filter((item) => {
+    const text = `${item.title} ${item.owner} ${item.category} ${item.notes}`.toLowerCase();
+    return (!needle || text.includes(needle)) && (!taskStatusFilter.value || item.status === taskStatusFilter.value);
+  });
+});
+
+const taskMetrics = computed(() => {
+  const activeTasks = longTermTasks.value.filter((item) => item.status === "active");
+  const blockedTasks = longTermTasks.value.filter((item) => item.status === "blocked");
+  const doneTasks = longTermTasks.value.filter((item) => item.status === "done");
+  const dueSoonTasks = longTermTasks.value.filter((item) => {
+    if (!item.target_date || ["done", "archived"].includes(item.status)) {
+      return false;
+    }
+    const days = daysUntil(item.target_date);
+    return days >= 0 && days <= 7;
+  });
+  return [
+    { label: t.value.longTermActiveMetric, value: activeTasks.length, icon: ListChecks },
+    { label: t.value.longTermBlockedMetric, value: blockedTasks.length, icon: AlertTriangle },
+    { label: t.value.longTermDueMetric, value: dueSoonTasks.length, icon: CalendarRange },
+    { label: t.value.longTermDoneMetric, value: doneTasks.length, icon: Check },
+  ];
+});
+
 const previewAssignments = computed(() => {
   return importPreview.value ? importPreview.value.assignments.slice(0, 20) : [];
 });
@@ -937,6 +1168,20 @@ function defaultAssignmentForm() {
     end_date: "",
     status: "active",
     priority: "medium",
+    notes: "",
+  };
+}
+
+function defaultTaskForm() {
+  return {
+    title: "",
+    owner: "",
+    category: "",
+    status: "active",
+    priority: "medium",
+    progress: 0,
+    start_date: today,
+    target_date: "",
     notes: "",
   };
 }
@@ -982,10 +1227,12 @@ async function uploadExcel(path) {
 async function loadData() {
   try {
     const data = await request(`/api/overview?date=${currentDate.value}`);
+    const taskData = await request("/api/tasks");
     stats.value = data.stats;
     members.value = data.members;
     projects.value = data.projects;
     assignments.value = data.assignments;
+    longTermTasks.value = taskData.tasks;
     memberLoad.value = data.member_load;
     projectLoad.value = data.project_load;
     activity.value = data.activity;
@@ -1071,6 +1318,20 @@ async function saveAssignment() {
   }
 }
 
+async function saveLongTermTask() {
+  try {
+    const path = editingTaskId.value ? `/api/tasks/${editingTaskId.value}` : "/api/tasks";
+    await request(path, {
+      method: editingTaskId.value ? "PUT" : "POST",
+      body: JSON.stringify(taskForm),
+    });
+    resetTaskForm();
+    await loadData();
+  } catch (err) {
+    error.value = err.message;
+  }
+}
+
 function editAssignment(item) {
   editingAssignmentId.value = item.id;
   Object.assign(assignmentForm, {
@@ -1092,6 +1353,51 @@ function resetAssignmentForm() {
   Object.assign(assignmentForm, defaultAssignmentForm());
 }
 
+function editLongTermTask(item) {
+  editingTaskId.value = item.id;
+  Object.assign(taskForm, {
+    title: item.title,
+    owner: item.owner || "",
+    category: item.category || "",
+    status: item.status,
+    priority: item.priority,
+    progress: item.progress,
+    start_date: item.start_date || "",
+    target_date: item.target_date || "",
+    notes: item.notes || "",
+  });
+  view.value = "tasks";
+}
+
+function resetTaskForm() {
+  editingTaskId.value = null;
+  Object.assign(taskForm, defaultTaskForm());
+}
+
+async function completeLongTermTask(item) {
+  try {
+    await request(`/api/tasks/${item.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ ...item, status: "done", progress: 100 }),
+    });
+    await loadData();
+  } catch (err) {
+    error.value = err.message;
+  }
+}
+
+async function removeLongTermTask(id) {
+  if (!window.confirm(t.value.deleteConfirm)) {
+    return;
+  }
+  try {
+    await request(`/api/tasks/${id}`, { method: "DELETE" });
+    await loadData();
+  } catch (err) {
+    error.value = err.message;
+  }
+}
+
 async function removeItem(type, id) {
   if (!window.confirm(t.value.deleteConfirm)) {
     return;
@@ -1110,6 +1416,12 @@ function bounded(value) {
 
 function formatDateTime(value) {
   return value ? value.replace("T", " ").slice(0, 16) : "";
+}
+
+function daysUntil(value) {
+  const target = new Date(`${value}T00:00:00`);
+  const base = new Date(`${currentDate.value}T00:00:00`);
+  return Math.ceil((target.getTime() - base.getTime()) / 86400000);
 }
 
 function riskLabel(value) {

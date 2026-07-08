@@ -486,6 +486,10 @@ label {
   grid-template-columns: repeat(4, minmax(150px, 1fr));
 }
 
+.task-metrics {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
 .issue-list {
   display: grid;
   gap: 8px;
@@ -596,6 +600,23 @@ td span {
   color: var(--green);
 }
 
+.status-pill.archived {
+  background: #eef2f7;
+  color: var(--muted);
+}
+
+.progress-cell {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-cell b {
+  color: var(--ink);
+  font-size: 13px;
+}
+
 .entity-grid {
   grid-template-columns: repeat(3, minmax(240px, 1fr));
 }
@@ -688,7 +709,7 @@ td span {
 
   .nav-list {
     grid-auto-flow: row;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .nav-list button {
@@ -700,9 +721,10 @@ td span {
     display: none;
   }
 
-  .metric-grid,
-  .import-metrics,
-  .load-grid,
+    .metric-grid,
+    .import-metrics,
+    .task-metrics,
+    .load-grid,
   .dashboard-split,
   .import-layout,
   .form-grid,

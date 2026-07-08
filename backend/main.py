@@ -10,16 +10,19 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import BASE_DIR, get_db, init_db
 from .excel_import import parse_resource_workbook
-from .schemas import AssignmentIn, MemberIn, ProjectIn
+from .schemas import AssignmentIn, LongTermTaskIn, MemberIn, ProjectIn
 from .services import (
     apply_excel_import,
     build_overview,
     create_assignment,
+    create_long_term_task,
     create_member,
     create_project,
     delete_entity,
     list_import_batches,
+    list_long_term_tasks,
     update_assignment,
+    update_long_term_task,
 )
 
 
@@ -54,6 +57,12 @@ def overview(date: Optional[str] = None):
 def imports():
     with get_db() as conn:
         return {"imports": list_import_batches(conn)}
+
+
+@app.get("/api/tasks")
+def tasks():
+    with get_db() as conn:
+        return {"tasks": list_long_term_tasks(conn)}
 
 
 @app.post("/api/imports/excel/preview")
@@ -125,6 +134,37 @@ def edit_assignment(assignment_id: int, payload: AssignmentIn):
         return {"ok": True}
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/tasks", status_code=201)
+def add_task(payload: LongTermTaskIn):
+    try:
+        with get_db() as conn:
+            task_id = create_long_term_task(conn, payload)
+        return {"id": task_id}
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/api/tasks/{task_id}")
+def edit_task(task_id: int, payload: LongTermTaskIn):
+    try:
+        with get_db() as conn:
+            updated = update_long_term_task(conn, task_id, payload)
+        if not updated:
+            raise HTTPException(status_code=404, detail="长期任务不存在")
+        return {"ok": True}
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/tasks/{task_id}")
+def remove_task(task_id: int):
+    with get_db() as conn:
+        deleted = delete_entity(conn, "long_term_tasks", "long_term_task", task_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="长期任务不存在")
+    return {"ok": True}
 
 
 @app.delete("/api/{resource}/{entity_id}")

@@ -33,3 +33,15 @@ class AssignmentIn(BaseModel):
     status: str = "active"
     priority: str = "medium"
     notes: str = ""
+
+
+class LongTermTaskIn(BaseModel):
+    title: str = Field(min_length=1)
+    owner: str = ""
+    category: str = ""
+    status: str = "active"
+    priority: str = "medium"
+    progress: int = Field(default=0, ge=0, le=100)
+    start_date: Optional[str] = None
+    target_date: Optional[str] = None
+    notes: str = ""
