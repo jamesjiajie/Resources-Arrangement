@@ -367,6 +367,8 @@ def update_long_term_task(conn: sqlite3.Connection, task_id: int, payload: LongT
 def apply_excel_import(conn: sqlite3.Connection, preview: dict, mode: str):
     if mode not in ("append", "replace_month", "update_catalog"):
         raise ValueError("未知导入模式")
+    if not preview.get("assignments"):
+        raise ValueError("没有识别到可导入的 FTE 安排，已取消导入以保护现有月份数据")
 
     if mode in ("replace_month", "update_catalog"):
         conn.execute(

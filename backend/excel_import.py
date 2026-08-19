@@ -8,12 +8,12 @@ from xml.etree import ElementTree
 
 
 STAGE_COLUMNS = [
-    ("Requirement", 4, 5),
-    ("Design", 6, 7),
-    ("Implementation", 8, 9),
-    ("Testing", 10, 11),
-    ("Deployment", 12, 13),
-    ("Maintenance", 14, 15),
+    ("Requirement", 5, 6),
+    ("Design", 7, 8),
+    ("Implementation", 9, 10),
+    ("Testing", 11, 12),
+    ("Deployment", 13, 14),
+    ("Maintenance", 15, 16),
 ]
 
 NS = {
@@ -170,7 +170,7 @@ def month_dates(resource_month: str):
 
 def row_values(rows, row_number: int):
     row = rows.get(row_number, {})
-    return [row.get(column) for column in range(1, 18)]
+    return [row.get(column) for column in range(1, 19)]
 
 
 def parse_resource_workbook(content: bytes, filename: str) -> dict:
@@ -208,9 +208,10 @@ def parse_resource_workbook(content: bytes, filename: str) -> dict:
             continue
 
         level = clean_text(values[1])
-        hkpm = clean_text(values[2])
-        area = clean_text(values[15])
-        remark = clean_text(values[16])
+        team = clean_text(values[2])
+        hkpm = clean_text(values[3])
+        area = clean_text(values[16])
+        remark = clean_text(values[17])
         member_key = normalize_key(first)
         member_notes = []
         if level:
@@ -224,7 +225,7 @@ def parse_resource_workbook(content: bytes, filename: str) -> dict:
         members[member_key] = {
             "name": first,
             "role": level,
-            "team": area,
+            "team": team,
             "capacity_hours_week": 40,
             "status": "away" if "resign" in remark.casefold() else "available",
             "notes": "; ".join(member_notes),
@@ -253,6 +254,17 @@ def parse_resource_workbook(content: bytes, filename: str) -> dict:
             task = clean_text(values[task_column - 1])
             fte = parse_number(values[fte_column - 1])
             if not task and fte is None:
+                continue
+            if fte == 0:
+                continue
+            if fte is not None and fte < 0:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "row": row_number,
+                        "message": f"{first} 的 {stage} FTE 不能为负数，已跳过该安排。",
+                    }
+                )
                 continue
             if fte is None:
                 issues.append(

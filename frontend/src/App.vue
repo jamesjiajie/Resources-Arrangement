@@ -36,7 +36,7 @@
       <header class="topbar">
         <div>
           <h1>{{ viewTitle }}</h1>
-          <p>{{ t.topbarDescription }}</p>
+          <p>{{ viewDescription }}</p>
         </div>
         <div class="top-actions">
           <button class="language-toggle" type="button" :title="t.switchLanguage" @click="toggleLanguage">
@@ -58,6 +58,14 @@
         <AlertTriangle :size="18" />
         <span>{{ error }}</span>
       </section>
+
+      <ResourceSandbox
+        v-if="view === 'sandbox'"
+        :language="language"
+        :members="members"
+        :assignments="assignments"
+        :member-load="memberLoad"
+      />
 
       <section v-if="view === 'dashboard'" class="dashboard-view">
         <div class="metric-grid">
@@ -688,6 +696,7 @@ import FolderPlus from "@lucide/vue/dist/esm/icons/folder-plus.mjs";
 import Gauge from "@lucide/vue/dist/esm/icons/gauge.mjs";
 import Languages from "@lucide/vue/dist/esm/icons/languages.mjs";
 import ListChecks from "@lucide/vue/dist/esm/icons/list-checks.mjs";
+import Network from "@lucide/vue/dist/esm/icons/network.mjs";
 import Pencil from "@lucide/vue/dist/esm/icons/pencil.mjs";
 import RefreshCw from "@lucide/vue/dist/esm/icons/refresh-cw.mjs";
 import RotateCcw from "@lucide/vue/dist/esm/icons/rotate-ccw.mjs";
@@ -696,6 +705,7 @@ import Search from "@lucide/vue/dist/esm/icons/search.mjs";
 import Trash2 from "@lucide/vue/dist/esm/icons/trash-2.mjs";
 import UserPlus from "@lucide/vue/dist/esm/icons/user-plus.mjs";
 import Users from "@lucide/vue/dist/esm/icons/users.mjs";
+import ResourceSandbox from "./components/ResourceSandbox.vue";
 
 const today = new Date().toISOString().slice(0, 10);
 const savedLanguage = window.localStorage.getItem("language");
@@ -741,12 +751,15 @@ const translations = {
     members: "同事",
     projects: "项目",
     tasks: "任务管理",
+    sandbox: "资源沙盘",
     imports: "导入",
     dashboardTitle: "资源总览",
     assignmentsTitle: "任务安排",
     membersTitle: "团队同事",
     projectsTitle: "项目组合",
     tasksTitle: "长期任务管理",
+    sandboxTitle: "关系脉络图",
+    sandboxDescription: "一眼看清谁在做什么、谁超负荷、哪里被阻塞。",
     memberMetric: "同事",
     activeProjectsMetric: "进行中项目",
     activeAssignmentsMetric: "进行中安排",
@@ -905,12 +918,15 @@ const translations = {
     members: "Members",
     projects: "Projects",
     tasks: "Tasks",
+    sandbox: "Resource Sandbox",
     imports: "Import",
     dashboardTitle: "Resource Overview",
     assignmentsTitle: "Task Assignments",
     membersTitle: "Team Members",
     projectsTitle: "Project Portfolio",
     tasksTitle: "Long-Term Task Management",
+    sandboxTitle: "Relationship Map",
+    sandboxDescription: "See ownership, workload, and blocked work at a glance.",
     memberMetric: "Members",
     activeProjectsMetric: "Active Projects",
     activeAssignmentsMetric: "Active Assignments",
@@ -1063,6 +1079,7 @@ const navigation = computed(() => [
   { id: "members", label: t.value.members, icon: Users },
   { id: "projects", label: t.value.projects, icon: FolderKanban },
   { id: "tasks", label: t.value.tasks, icon: ListChecks },
+  { id: "sandbox", label: t.value.sandbox, icon: Network },
   { id: "imports", label: t.value.imports, icon: FileUp },
 ]);
 
@@ -1096,8 +1113,13 @@ const viewTitle = computed(() => {
     members: t.value.membersTitle,
     projects: t.value.projectsTitle,
     tasks: t.value.tasksTitle,
+    sandbox: t.value.sandboxTitle,
     imports: t.value.excelImportTitle,
   }[view.value];
+});
+
+const viewDescription = computed(() => {
+  return view.value === "sandbox" ? t.value.sandboxDescription : t.value.topbarDescription;
 });
 
 const metrics = computed(() => [
