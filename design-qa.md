@@ -1,57 +1,76 @@
-# Resource Sandbox Design QA
+**Comparison target**
 
-- Source visual truth: `/Users/james/.codex/generated_images/019ff09c-4e1d-7ba3-a54e-173d3517ec23/exec-d619f985-2844-46f7-9167-f580b785c082.png`
-- Implementation screenshot: `/Users/james/Document/Projects/Resources-Arrangement/sandbox-implementation-final.png`
-- Combined comparison: `/Users/james/Document/Projects/Resources-Arrangement/sandbox-design-comparison.png`
-- Browser viewport: 1440 x 1024 CSS px
-- Source pixels: 1487 x 1058
-- Implementation pixels: 1440 x 1024
-- Density normalization: both images were normalized to 720 x 512 inside a 1440 x 548 side-by-side comparison; no browser chrome was included.
-- State: Chinese desktop view, `资源沙盘` selected, graph mode, all projects, no search term, `陈安` selected. The local database was empty, so the implementation visibly uses its labeled sample-data state.
+- Source visual truth: `/Users/james/.codex/generated_images/019ff09c-4e1d-7ba3-a54e-173d3517ec23/exec-7ca53f93-a11b-4136-a5a1-64fc1263881c.png`
+- Implementation: browser-rendered Resource Sandbox at `http://127.0.0.1:8000/`, captured in the Codex in-app browser during this QA run.
+- Viewport: 1280 × 720 CSS pixels, desktop, Chinese UI, project constellation view. The source is a 1488 × 1058 desktop composition; comparison is normalized to the same desktop information architecture rather than a 1:1 crop.
+- State: source has one project expanded and all other projects collapsed; implementation was checked in the equivalent selected-project state, first `Commercial Fixed`, then `AI Hub` after selection.
 
-## Full-view comparison evidence
+**Full-view comparison evidence**
 
-The implementation preserves the target's major composition: 260 px dark navigation rail, light workspace, title and date controls, people column, allocation connections, task/project column, and a right-side detail inspector. The selected person, overload colors, blocked states, capacity ring, related-work list, and risk panel all retain the intended hierarchy.
+The browser capture visibly shows all 13 project nodes, a centered selected project, radial project links, small pixel-avatar member orbit, minimap, density controls, summary counts, and a right-hand selected-project inspector. The source mock uses the same hierarchy and interaction model. Focused inspection covered the selected center card, project-node labels, the member orbit, and the inspector member rows.
 
-The implementation intentionally uses straight allocation lines instead of the mock's decorative curves so line weight remains stable with live data and responsive layout. The empty-database notice adds one row above the sandbox; it disappears automatically when real assignments are available.
+**Required fidelity surfaces**
 
-## Focused comparison evidence
+- Fonts and typography: existing app font stack and title hierarchy are retained. Project labels use compact, readable weights; long project names truncate rather than overflow.
+- Spacing and layout rhythm: desktop canvas, inspector, toolbar, controls, and project nodes preserve the design's compact working-area rhythm. The 13-node layout remains inside the canvas at the verified desktop viewport.
+- Colors and visual tokens: existing navy shell and teal primary token remain in use; teal marks normal relationships, amber marks risk links, and status colors match the existing product language.
+- Image quality and asset fidelity: generated pixel-art avatars are used as raster assets, cropped from an 8-avatar sheet into 26–27px tiles. The final browser capture confirms the avatars render crisply in both orbit and inspector rows.
+- Copy and content: Chinese labels identify project count, people, assignments, cross-project people, selected-project details, density, reset, and risk notes. Live project and member names come from the existing overview payload.
 
-- Header and navigation: entry order, active treatment, typography, dark sidebar, amber RA mark, teal actions, and compact radii match the existing product and source direction.
-- Relationship stage: person portraits are sharp 256 px generated assets with consistent studio treatment; allocation lines use teal, orange, and red semantic tokens; task cards retain the source's project, status, task, and date hierarchy.
-- Detail inspector: selected identity, capacity visualization, available-hours summary, related work, and risk warning match the target structure without clipped text at 1440 x 1024.
+**Findings**
 
-## Required fidelity surfaces
+No actionable P0, P1, or P2 differences were found for the selected desktop constellation state.
 
-- Fonts and typography: system UI stack matches the existing application; title, section, body, metadata, and status weights are coherent and remain readable at the target viewport. No truncation or broken wrapping was observed.
-- Spacing and layout rhythm: the main three-column relationship structure and right inspector fit the viewport. The first pass stacked every assignment as a separate card and created excessive height; the final pass groups each person around one primary task card while preserving every connection and all related work in the inspector.
-- Colors and visual tokens: the implementation reuses the repository's navy, teal, amber, red, muted text, border, background, and shadow tokens. Semantic overload, blocked, planned, and normal states are consistent.
-- Image quality and asset fidelity: four generated employee portraits were resized to 256 px and load crisply in circular crops. No placeholder glyphs, broken images, or compression artifacts were observed.
-- Copy and content: Chinese labels are coherent and match the selected concept. The sample-data notice clearly distinguishes demo content from live data.
-- Icons: the implementation uses the project's existing icon family with consistent stroke weight and alignment.
-- Accessibility: semantic buttons, inputs, select controls, image alt text, active navigation state, and visible focus styles are present. Color is supplemented by percentages and text labels.
+- [P3] Capacity figures can be zero when the global baseline date falls outside the imported allocation month.
+  Location: selected-project node and inspector.
+  Evidence: the verified page uses baseline date 2026-09-01 while the imported August allocations are no longer current, so live `member_load` is 0%.
+  Impact: this is correct date-scoped data behavior, but it is visually less representative than the stress-test mock.
+  Follow-up: consider preserving the last imported resource month as the default baseline date after import.
 
-## Interaction and runtime checks
+**Primary interactions tested**
 
-- Navigation to `资源沙盘`: passed.
-- Person selection and inspector update (`陈安` to `李敏`): passed.
-- Search for `回归` reducing the stage to one matching row: passed.
-- Project filter: passed.
-- Graph/list toggle and active state: passed.
-- Default-state restoration: passed after reload.
-- Browser console warnings/errors: none.
-- Production build: passed with Vite.
+1. Opened the Resource Sandbox navigation entry.
+2. Confirmed all 13 projects, 45 people, and 47 assignments are represented.
+3. Selected `AI Hub` from the constellation and confirmed the inspector and expanded member orbit update.
+4. Confirmed console errors and warnings: none.
+5. Confirmed production build: `npm run build` passes.
 
-## Comparison history
+**Implementation checklist**
 
-1. Pass 1 finding — P2: every assignment rendered as a full task card, causing the graph to run below the target viewport and weakening the one-person/one-primary-task rhythm.
-   - Fix: retained all allocation lines and inspector items, but reduced each person row to one primary task card.
-   - Post-fix evidence: `sandbox-implementation-pass2.png` and the final screenshot show all four people, legend, and detail panel within 1440 x 1024.
-2. Pass 2 result — no actionable P0/P1/P2 differences remained. Browser interactions and console checks passed.
+- [x] Replace person-to-task rows with project constellation semantic zoom.
+- [x] Keep one selected project expanded and the remaining projects compact.
+- [x] Add raster pixel-avatar asset and display it in selected-project relationships.
+- [x] Add filtering, text search, density control, reset, minimap, project inspector, and responsive fallback.
+- [x] Verify build, browser rendering, interaction, and console output.
 
-## Follow-up polish
+**Follow-up polish**
 
-- P3: replace straight allocation lines with measured curves only if future live-data testing confirms that curves remain readable with many concurrent assignments.
-- P3: with live data, the sample-data notice disappears and the content begins closer to the source's vertical position.
+- Optional: preserve the latest imported resource period in the date control after an Excel import.
+
+**Accordion detail iteration**
+
+- Source interaction design: the approved right-inspector member accordion, with task, stage, allocation, period, status, source notes, and a single expanded member at a time.
+- Browser evidence: 1280 × 720 desktop capture on the Resource Sandbox. `Chen, Jett WJ` was expanded after `Cai, Wayne WC`; exactly one `.member-details` region remained open. The expanded assignment showed `Implementation`, `100%`, `2026-08-01 — 2026-08-31`, source notes, and the "不在当前基准日期内" state.
+- Date semantics: risk cards are now calculated from assignments active on the baseline date only. With baseline date `2026-09-01` and August-only source assignments, zero risk cards were rendered; the task retains its historical detail instead of incorrectly reporting a current high-load warning.
+- Task focus: selecting a detail task produced one highlighted center project and one highlighted matching orbit avatar, connecting inspector selection back to the constellation without changing layout.
+- Console errors and warnings: none in a fresh browser tab.
+- Build: `npm run build` passed after the iteration.
+
+No actionable P0, P1, or P2 differences were found in the expanded-member state. The nested detail card remains within the inspector scroll region and does not alter constellation layout.
+
+final result: passed
+
+**Constellation hierarchy fidelity iteration**
+
+- Rechecked against the same approved source at a 1280 × 720 desktop viewport after replacing the uniform rectangular spoke layout.
+- The selected project is now a compact teal pill inside a pale dashed project domain. Its member avatars are independently named nodes within that domain, with lighter internal relationship lines.
+- The other 12 projects are circular, color-coded outer nodes. Each node shows people, assignments, and the imported plan total while keeping the date-scoped current load in the inspector.
+- Outer links now begin at the project-domain boundary instead of crossing the center, use lower visual weight, and keep risk coloring as a secondary signal.
+- Verified project semantic zoom by switching from `Commercial Fixed` to `Now-TV`: exactly one selected project remained, the canvas member count changed from 8 to 1, and the inspector member count matched.
+- Verified member accordion after project switching: exactly one task-detail region opened.
+- Console errors and warnings: none.
+- Production build: `npm run build` passed.
+
+No actionable P0, P1, or P2 fidelity or interaction issues were found in the revised hierarchy.
 
 final result: passed

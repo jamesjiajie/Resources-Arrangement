@@ -1,477 +1,83 @@
 <template>
   <section class="sandbox-view">
     <div class="sandbox-toolbar">
-      <label>
-        <span>{{ copy.scope }}</span>
-        <select v-model="projectFilter">
-          <option value="">{{ copy.allProjects }}</option>
-          <option v-for="project in availableProjects" :key="project" :value="project">{{ project }}</option>
-        </select>
-      </label>
-      <div class="sandbox-search">
-        <Search :size="17" />
-        <input v-model.trim="query" :placeholder="copy.search" />
-      </div>
-      <div class="view-switch" :aria-label="copy.viewMode">
-        <button type="button" :class="{ active: mode === 'graph' }" @click="mode = 'graph'">
-          <Network :size="17" />
-        </button>
-        <button type="button" :class="{ active: mode === 'list' }" @click="mode = 'list'">
-          <List :size="17" />
-        </button>
-      </div>
+      <label><span>{{ copy.scope }}</span><select v-model="projectFilter"><option value="">{{ copy.allProjects }}</option><option v-for="p in clusters" :key="p.id" :value="p.name">{{ p.name }}</option></select></label>
+      <div class="sandbox-search"><Search :size="17" /><input v-model.trim="query" :placeholder="copy.search" /></div>
+      <label class="density"><span>{{ copy.density }}</span><input v-model="density" type="range" min="0.85" max="1.2" step="0.05" /></label>
+      <button class="reset" type="button" @click="reset"><RotateCcw :size="16" />{{ copy.reset }}</button>
     </div>
-
-    <div v-if="usingDemo" class="demo-notice">
-      <Info :size="16" />
-      <span>{{ copy.demoNotice }}</span>
-    </div>
-
-    <div class="sandbox-grid" :class="{ 'list-mode': mode === 'list' }">
-      <section class="relationship-stage">
-        <div class="stage-heading">
-          <strong>{{ copy.people }}（{{ filteredPeople.length }}）</strong>
-          <strong>{{ copy.tasks }} / {{ copy.projects }}（{{ visibleAssignmentCount }}）</strong>
-        </div>
-
-        <div v-if="filteredPeople.length" class="relationship-rows">
-          <article
-            v-for="person in filteredPeople"
-            :key="person.member_id"
-            class="relationship-row"
-            :class="{ selected: selectedPerson?.member_id === person.member_id }"
-          >
-            <button class="person-card" type="button" @click="selectedId = person.member_id">
-              <img :src="person.avatar" :alt="person.name" />
-              <span class="person-copy">
-                <strong>{{ person.name }}</strong>
-                <small>{{ person.role || copy.noRole }}</small>
-                <b :class="person.risk">{{ Math.round(person.allocated_percent) }}%</b>
-                <em>{{ person.allocated_hours }} / {{ person.capacity_hours_week }} {{ copy.hours }}</em>
-              </span>
-            </button>
-
-            <div class="connection-stack" aria-hidden="true">
-              <div v-for="assignment in person.assignments" :key="assignment.id" class="connection-item">
-                <i :class="connectionClass(assignment)" :style="{ height: lineHeight(assignment.allocation_percent) + 'px' }"></i>
-                <b>{{ Math.round(assignment.allocation_percent) }}%</b>
-              </div>
-              <div v-if="!person.assignments.length" class="connection-empty">{{ copy.noCurrentWork }}</div>
-            </div>
-
-            <div class="task-stack">
-              <button
-                v-if="person.assignments[0]"
-                type="button"
-                class="task-card"
-                :class="person.assignments[0].status"
-                @click="selectAssignment(person, person.assignments[0])"
-              >
-                <span class="project-line">
-                  <FolderKanban :size="15" />
-                  {{ person.assignments[0].project_name }}
-                  <em :class="person.assignments[0].status">{{ statusLabel(person.assignments[0].status) }}</em>
-                </span>
-                <strong>{{ person.assignments[0].task_name }}</strong>
-                <small>{{ copy.period }} {{ person.assignments[0].start_date }} — {{ person.assignments[0].end_date || copy.ongoing }}</small>
-              </button>
-              <div v-if="!person.assignments.length" class="task-empty">
-                <CircleOff :size="18" />
-                {{ copy.noCurrentWork }}
-              </div>
-            </div>
-          </article>
-        </div>
-
-        <div v-else class="sandbox-empty">
-          <SearchX :size="28" />
-          <strong>{{ copy.noResults }}</strong>
-          <span>{{ copy.tryAnother }}</span>
-        </div>
-
-        <footer class="sandbox-legend">
-          <div>
-            <strong>{{ copy.lineWeight }}</strong>
-            <span><i class="weight thick"></i>≥ 60%</span>
-            <span><i class="weight medium"></i>30%–59%</span>
-            <span><i class="weight thin"></i>&lt; 30%</span>
-          </div>
-          <div>
-            <strong>{{ copy.status }}</strong>
-            <span><i class="dot overload"></i>{{ copy.overloaded }}</span>
-            <span><i class="dot risk"></i>{{ copy.atRisk }}</span>
-            <span><i class="dot normal"></i>{{ copy.normal }}</span>
-          </div>
-        </footer>
-      </section>
-
-      <aside v-if="selectedPerson" class="detail-panel">
-        <div class="detail-head">
-          <img :src="selectedPerson.avatar" :alt="selectedPerson.name" />
-          <div>
-            <strong>{{ selectedPerson.name }}</strong>
-            <span>{{ selectedPerson.role || copy.noRole }}</span>
-            <em :class="selectedPerson.risk">{{ riskLabel(selectedPerson.risk) }}</em>
-          </div>
-        </div>
-
-        <section class="capacity-overview">
-          <h3>{{ copy.capacityOverview }}</h3>
-          <div class="capacity-chart">
-            <svg viewBox="0 0 92 92" role="img" :aria-label="`${Math.round(selectedPerson.allocated_percent)}%`">
-              <circle cx="46" cy="46" r="36" class="ring-track" />
-              <circle
-                cx="46"
-                cy="46"
-                r="36"
-                class="ring-value"
-                :class="selectedPerson.risk"
-                :style="{ strokeDasharray: `${Math.min(selectedPerson.allocated_percent, 100) * 2.262} 226.2` }"
-              />
-            </svg>
-            <strong>{{ Math.round(selectedPerson.allocated_percent) }}<small>%</small></strong>
-          </div>
-          <div class="capacity-numbers">
-            <strong>{{ selectedPerson.allocated_hours }} / {{ selectedPerson.capacity_hours_week }} {{ copy.hours }}</strong>
-            <span>{{ copy.plannedHours }}</span>
-            <strong>{{ Math.max(0, selectedPerson.capacity_hours_week - selectedPerson.allocated_hours).toFixed(1) }} {{ copy.hours }}</strong>
-            <span>{{ copy.availableHours }}</span>
-          </div>
-        </section>
-
-        <section class="related-work">
-          <h3>{{ copy.relatedWork }}（{{ selectedPerson.assignments.length }}）</h3>
-          <button
-            v-for="assignment in selectedPerson.assignments"
-            :key="assignment.id"
-            type="button"
-            :class="{ active: selectedAssignment?.id === assignment.id }"
-            @click="selectedAssignment = assignment"
-          >
-            <span><i :class="connectionClass(assignment)"></i>{{ assignment.project_name }}</span>
-            <strong>{{ assignment.task_name }}</strong>
-            <b>{{ Math.round(assignment.allocation_percent) }}%</b>
+    <div v-if="usingDemo" class="demo-notice"><Info :size="16" />{{ copy.demoNotice }}</div>
+    <div class="sandbox-summary"><span><b>{{ clusters.length }}</b> {{ copy.projects }}</span><i /> <span><b>{{ visiblePeople }}</b> {{ copy.people }}</span><i /><span><b>{{ visibleAssignments.length }}</b> {{ copy.assignments }}</span><i /><span class="cross"><Network :size="14" /> {{ crossPeople }} {{ copy.cross }}</span></div>
+    <div class="sandbox-grid">
+      <section class="constellation-stage">
+        <div class="stage-meta"><strong>{{ copy.title }}</strong><small>{{ copy.hint }}</small></div>
+        <div class="canvas" :style="{ '--node-scale': density }">
+          <div v-if="selectedProject" class="project-domain" aria-hidden="true"></div>
+          <div v-for="edge in edges" :key="edge.id" class="edge" :class="edge.tone" :style="edge.style"></div>
+          <div v-for="edge in memberEdges" :key="edge.id" class="member-edge" :class="{ focused: selectedTaskMemberId === edge.memberId }" :style="edge.style"></div>
+          <button v-for="(p, n) in selectedProject?.people.slice(0, 8)" :key="p.member_id" type="button" class="canvas-member" :class="{ focused: selectedTaskMemberId === p.member_id, expanded: expandedMemberId === p.member_id }" :style="memberCanvasStyle(n, selectedProject.people.length)" @click="toggleMember(p.member_id)"><PixelAvatar :index="p.avatar" /><span><strong>{{ shortName(p.name) }}</strong><small>{{ Math.round(p.allocated_percent) }}%</small></span></button>
+          <button v-for="cluster in clusters" :key="cluster.id" type="button" class="project-node" :class="{ selected: cluster.id === selectedProjectId, 'task-focused': selectedTaskId && cluster.id === selectedProjectId }" :style="nodeStyle(cluster)" @click="selectProject(cluster.id)">
+            <span class="node-top"><span class="project-icon" :class="tone(cluster.status)"><FolderKanban :size="15" /></span><em :class="tone(cluster.status)">{{ statusLabel(cluster.status) }}</em></span>
+            <strong>{{ cluster.name }}</strong><span class="node-metrics"><b>{{ cluster.people.length }} {{ copy.people }} · {{ cluster.assignments.length }} {{ copy.assignments }}</b><b>{{ Math.round(cluster.totalLoad) }}%</b></span><small class="load-badge">{{ copy.snapshotLoad }}</small>
           </button>
-        </section>
-
-        <section v-if="riskAssignments.length" class="risk-note">
-          <h3>{{ copy.riskNotes }}（{{ riskAssignments.length }}）</h3>
-          <div>
-            <AlertTriangle :size="18" />
-            <p>
-              <strong>{{ riskAssignments[0].task_name }}</strong>
-              <span>{{ riskMessage(riskAssignments[0]) }}</span>
-            </p>
-          </div>
-        </section>
+          <div class="canvas-buttons"><button type="button" @click="density = Math.min(1.2, Number(density) + .05)"><Plus :size="16" /></button><button type="button" @click="density = Math.max(.85, Number(density) - .05)"><Minus :size="16" /></button></div>
+          <div class="minimap"><span v-for="cluster in clusters" :key="cluster.id" :class="{ active: cluster.id === selectedProjectId }" :style="miniStyle(cluster)"></span></div>
+        </div>
+        <footer class="legend"><span><i class="node-dot selected"></i>{{ copy.expanded }}</span><span><i class="node-dot"></i>{{ copy.collapsed }}</span><span><i class="line-dot risk"></i>{{ copy.risk }}</span><span><i class="line-dot normal"></i>{{ copy.normal }}</span></footer>
+      </section>
+      <aside v-if="selectedProject" class="detail-panel">
+        <div class="detail-head"><span class="detail-icon" :class="tone(selectedProject.status)"><FolderKanban :size="19" /></span><div><span>{{ copy.selected }}</span><strong>{{ selectedProject.name }}</strong><em :class="tone(selectedProject.status)">{{ statusLabel(selectedProject.status) }}</em></div></div>
+        <section class="capacity"><div class="ring" :style="{ '--progress': `${Math.min(selectedProject.load, 100) * 3.6}deg` }"><b>{{ Math.round(selectedProject.load) }}%</b><small>{{ copy.average }}</small></div><div><strong>{{ selectedProject.people.length }} {{ copy.people }}</strong><span>{{ copy.participants }}</span><strong>{{ selectedProject.assignments.length }} {{ copy.assignments }}</strong><span>{{ copy.workItems }}</span></div></section>
+        <section class="members"><div class="section-title"><h3>{{ copy.members }}（{{ selectedProject.people.length }}）</h3><span>{{ copy.sorted }}</span></div><article v-for="p in selectedProject.people" :key="p.member_id" class="member-item" :class="{ expanded: expandedMemberId === p.member_id }"><button class="member" type="button" :aria-expanded="expandedMemberId === p.member_id" @click="toggleMember(p.member_id)"><PixelAvatar :index="p.avatar" /><span><strong>{{ p.name }}</strong><small>{{ p.role || copy.noRole }}</small></span><b :class="p.risk">{{ Math.round(p.allocated_percent) }}%</b><ChevronDown :size="15" class="member-chevron" /></button><div v-if="expandedMemberId === p.member_id" class="member-details"><div class="detail-caption">{{ copy.workDetails }}（{{ memberAssignments(p).length }}）</div><button v-for="assignment in memberAssignments(p)" :key="assignment.id" type="button" class="task-detail" :class="{ selected: selectedTaskId === assignment.id, inactive: !isCurrentAssignment(assignment) }" @click="selectTask(p.member_id, assignment.id)"><span class="task-detail-head"><strong>{{ assignment.task_name }}</strong><em :class="tone(assignment.status)">{{ statusLabel(assignment.status) }}</em></span><span class="task-meta"><b>{{ stageFor(assignment) }}</b><b>{{ Math.round(assignment.allocation_percent) }}%</b></span><span class="task-period">{{ assignment.start_date }} — {{ assignment.end_date || copy.ongoing }}</span><small v-if="assignment.notes">{{ assignment.notes }}</small><span v-if="!isCurrentAssignment(assignment)" class="outside-period">{{ copy.outsidePeriod }}</span></button></div></article></section>
+        <section v-if="selectedProject.currentRisks.length" class="risk-note"><div class="section-title"><h3>{{ copy.riskNotes }}（{{ selectedProject.currentRisks.length }}）</h3></div><div><AlertTriangle :size="17" /><span><strong>{{ selectedProject.currentRisks[0].task_name }}</strong>{{ riskText(selectedProject.currentRisks[0]) }}</span></div></section>
       </aside>
     </div>
   </section>
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, defineComponent, h, ref, watch } from "vue";
 import AlertTriangle from "@lucide/vue/dist/esm/icons/triangle-alert.mjs";
-import CircleOff from "@lucide/vue/dist/esm/icons/circle-off.mjs";
 import FolderKanban from "@lucide/vue/dist/esm/icons/folder-kanban.mjs";
 import Info from "@lucide/vue/dist/esm/icons/info.mjs";
-import List from "@lucide/vue/dist/esm/icons/list.mjs";
+import Minus from "@lucide/vue/dist/esm/icons/minus.mjs";
 import Network from "@lucide/vue/dist/esm/icons/network.mjs";
+import Plus from "@lucide/vue/dist/esm/icons/plus.mjs";
+import RotateCcw from "@lucide/vue/dist/esm/icons/rotate-ccw.mjs";
 import Search from "@lucide/vue/dist/esm/icons/search.mjs";
-import SearchX from "@lucide/vue/dist/esm/icons/search-x.mjs";
+import ChevronDown from "@lucide/vue/dist/esm/icons/chevron-down.mjs";
+import sheet from "../assets/avatars/pixel-avatar-sheet.png";
 
-import chenAvatar from "../assets/avatars/chen-an.png";
-import liAvatar from "../assets/avatars/li-min.png";
-import wangAvatar from "../assets/avatars/wang-yue.png";
-import zhaoAvatar from "../assets/avatars/zhao-ning.png";
-
-const props = defineProps({
-  language: { type: String, default: "zh" },
-  members: { type: Array, default: () => [] },
-  assignments: { type: Array, default: () => [] },
-  memberLoad: { type: Array, default: () => [] },
-});
-
-const avatars = [chenAvatar, liAvatar, wangAvatar, zhaoAvatar];
-const query = ref("");
-const projectFilter = ref("");
-const mode = ref("graph");
-const selectedId = ref(null);
-const selectedAssignment = ref(null);
-
-const labels = {
-  zh: {
-    scope: "范围",
-    allProjects: "全部项目",
-    search: "搜索同事或任务",
-    viewMode: "视图模式",
-    demoNotice: "当前没有资源数据，正在展示示例沙盘；导入或新增安排后会自动切换为真实数据。",
-    people: "同事",
-    tasks: "任务",
-    projects: "项目",
-    hours: "小时",
-    noRole: "未填写角色",
-    noCurrentWork: "当前没有任务安排",
-    period: "周期",
-    ongoing: "持续",
-    noResults: "没有匹配的关系",
-    tryAnother: "请调整搜索词或项目范围。",
-    lineWeight: "连线粗细（占用比例）",
-    status: "状态说明",
-    overloaded: "超负荷",
-    atRisk: "风险",
-    normal: "正常",
-    capacityOverview: "容量概览",
-    plannedHours: "本期计划工时",
-    availableHours: "可用工时",
-    relatedWork: "关联工作",
-    riskNotes: "风险提示",
-  },
-  en: {
-    scope: "Scope",
-    allProjects: "All projects",
-    search: "Search people or tasks",
-    viewMode: "View mode",
-    demoNotice: "No resource data yet. Showing a sample sandbox that will switch to live data after assignments are added.",
-    people: "People",
-    tasks: "Tasks",
-    projects: "Projects",
-    hours: "hours",
-    noRole: "No role",
-    noCurrentWork: "No current work",
-    period: "Period",
-    ongoing: "Ongoing",
-    noResults: "No matching relationships",
-    tryAnother: "Adjust the search or project scope.",
-    lineWeight: "Line weight (allocation)",
-    status: "Status",
-    overloaded: "Overloaded",
-    atRisk: "At risk",
-    normal: "Normal",
-    capacityOverview: "Capacity overview",
-    plannedHours: "Planned hours",
-    availableHours: "Available hours",
-    relatedWork: "Related work",
-    riskNotes: "Risk notes",
-  },
-};
-
-const copy = computed(() => labels[props.language] || labels.zh);
-const usingDemo = computed(() => !props.memberLoad.length && !props.assignments.length);
-
-const demoAssignments = [
-  { id: "d1", member_id: 1, project_name: "资源排期系统", task_name: "API 服务与资源模型", allocation_percent: 50, status: "blocked", start_date: "2026-08-01", end_date: "2026-08-28" },
-  { id: "d2", member_id: 1, project_name: "数据同步服务", task_name: "同步服务技术预研", allocation_percent: 30, status: "active", start_date: "2026-08-05", end_date: "2026-08-20" },
-  { id: "d3", member_id: 2, project_name: "客户门户改版", task_name: "Vue 工作台体验升级", allocation_percent: 80, status: "active", start_date: "2026-08-03", end_date: "2026-09-10" },
-  { id: "d4", member_id: 2, project_name: "资源排期系统", task_name: "交互组件联调", allocation_percent: 30, status: "planned", start_date: "2026-08-11", end_date: "2026-08-26" },
-  { id: "d5", member_id: 3, project_name: "客户门户改版", task_name: "回归测试计划", allocation_percent: 40, status: "blocked", start_date: "2026-08-05", end_date: "2026-08-20" },
-  { id: "d6", member_id: 3, project_name: "数据同步服务", task_name: "接口验收", allocation_percent: 20, status: "active", start_date: "2026-08-10", end_date: "2026-08-31" },
-  { id: "d7", member_id: 4, project_name: "资源排期系统", task_name: "需求梳理与交付节奏", allocation_percent: 25, status: "active", start_date: "2026-08-01", end_date: "2026-09-15" },
-  { id: "d8", member_id: 4, project_name: "客户门户改版", task_name: "跨项目协调", allocation_percent: 20, status: "planned", start_date: "2026-08-11", end_date: "2026-08-25" },
-];
-
-const demoPeople = [
-  { member_id: 1, name: "陈安", role: "后端工程师", team: "平台组", capacity_hours_week: 40, allocated_percent: 80, allocated_hours: 32, risk: "normal" },
-  { member_id: 2, name: "李敏", role: "前端工程师", team: "体验组", capacity_hours_week: 40, allocated_percent: 110, allocated_hours: 44, risk: "overloaded" },
-  { member_id: 3, name: "王越", role: "测试工程师", team: "质量组", capacity_hours_week: 40, allocated_percent: 60, allocated_hours: 24, risk: "blocked" },
-  { member_id: 4, name: "赵宁", role: "项目经理", team: "交付组", capacity_hours_week: 40, allocated_percent: 45, allocated_hours: 18, risk: "normal" },
-];
-
-const people = computed(() => {
-  const loads = usingDemo.value ? demoPeople : props.memberLoad;
-  const work = usingDemo.value ? demoAssignments : props.assignments;
-  return loads.map((load, index) => {
-    const member = props.members.find((item) => item.id === load.member_id) || {};
-    return {
-      ...load,
-      role: load.role || member.role || "",
-      avatar: avatars[index % avatars.length],
-      assignments: work.filter((item) => item.member_id === load.member_id),
-    };
-  });
-});
-
-const availableProjects = computed(() => {
-  const names = people.value.flatMap((person) => person.assignments.map((item) => item.project_name));
-  return [...new Set(names)].filter(Boolean).sort();
-});
-
-const filteredPeople = computed(() => {
-  const needle = query.value.toLowerCase();
-  return people.value
-    .map((person) => ({
-      ...person,
-      assignments: person.assignments.filter((item) => {
-        const matchesProject = !projectFilter.value || item.project_name === projectFilter.value;
-        const text = `${person.name} ${person.role} ${item.project_name} ${item.task_name}`.toLowerCase();
-        return matchesProject && (!needle || text.includes(needle));
-      }),
-    }))
-    .filter((person) => {
-      if (person.assignments.length) return true;
-      if (projectFilter.value) return false;
-      return !needle || `${person.name} ${person.role}`.toLowerCase().includes(needle);
-    });
-});
-
-const visibleAssignmentCount = computed(() => filteredPeople.value.reduce((sum, person) => sum + person.assignments.length, 0));
-const selectedPerson = computed(() => people.value.find((person) => person.member_id === selectedId.value) || filteredPeople.value[0] || null);
-const riskAssignments = computed(() => selectedPerson.value?.assignments.filter((item) => item.status === "blocked" || item.allocation_percent >= 70) || []);
-
-watch(people, (items) => {
-  if (!items.some((item) => item.member_id === selectedId.value)) selectedId.value = items[0]?.member_id ?? null;
-}, { immediate: true });
-
-watch(selectedPerson, (person) => {
-  selectedAssignment.value = person?.assignments[0] || null;
-});
-
-function selectAssignment(person, assignment) {
-  selectedId.value = person.member_id;
-  selectedAssignment.value = assignment;
-}
-
-function lineHeight(percent) {
-  if (percent >= 60) return 6;
-  if (percent >= 30) return 4;
-  return 2;
-}
-
-function connectionClass(assignment) {
-  if (assignment.status === "blocked") return "blocked";
-  if (assignment.allocation_percent >= 70) return "risk";
-  return "normal";
-}
-
-function statusLabel(status) {
-  const values = props.language === "en"
-    ? { planned: "Planned", active: "Active", blocked: "Blocked", done: "Done", paused: "Paused" }
-    : { planned: "计划", active: "正常", blocked: "阻塞", done: "完成", paused: "暂停" };
-  return values[status] || status;
-}
-
-function riskLabel(risk) {
-  const values = props.language === "en"
-    ? { overloaded: "Overloaded", blocked: "Blocked", tight: "Near capacity", underused: "Available", normal: "Normal" }
-    : { overloaded: "超负荷", blocked: "有阻塞", tight: "接近满载", underused: "可继续安排", normal: "正常" };
-  return values[risk] || values.normal;
-}
-
-function riskMessage(assignment) {
-  if (props.language === "en") return assignment.status === "blocked" ? "Blocked work needs attention." : "High allocation may create delivery risk.";
-  return assignment.status === "blocked" ? "任务已阻塞，需要尽快明确依赖与处理人。" : "占用比例较高，可能影响同一成员的其他交付。";
-}
+const PixelAvatar = defineComponent({ props: { index: { type: Number, default: 0 } }, setup(props) { return () => h("span", { class: "pixel-avatar" }, [h("img", { src: sheet, alt: "", style: { transform: `translate(${-(props.index % 4) * 25}%, ${-Math.floor(props.index / 4) * 50}%)` } })]); } });
+const props = defineProps({ language: { type: String, default: "zh" }, currentDate: { type: String, default: "" }, members: { type: Array, default: () => [] }, assignments: { type: Array, default: () => [] }, memberLoad: { type: Array, default: () => [] } });
+const query = ref(""); const projectFilter = ref(""); const selectedProjectId = ref(null); const expandedMemberId = ref(null); const selectedTaskId = ref(null); const density = ref(1);
+const labels = { zh: { scope:"范围", allProjects:"全部项目", search:"搜索项目、同事或任务", density:"密度", reset:"重置", projects:"项目", people:"人", assignments:"条安排", cross:"跨项目人员", title:"项目星座图", hint:"点击项目展开成员关系", demoNotice:"当前没有资源数据，正在展示示例沙盘；导入或新增安排后会自动切换为真实数据。", expanded:"已展开项目", collapsed:"收起项目", risk:"风险连线", normal:"正常连线", selected:"当前项目", average:"平均占用", participants:"参与人员", workItems:"工作项", members:"项目成员", sorted:"按占用排序", noRole:"未填写角色", riskNotes:"风险提示", workDetails:"工作明细", ongoing:"持续", outsidePeriod:"不在当前基准日期内", snapshotLoad:"计划总占用" }, en: { scope:"Scope", allProjects:"All projects", search:"Search projects, people or work", density:"Density", reset:"Reset", projects:"projects", people:"people", assignments:"assignments", cross:"cross-project", title:"Project constellation", hint:"Select a project to expand its members", demoNotice:"No resource data yet. Showing a sample sandbox that will switch to live data after assignments are added.", expanded:"Expanded project", collapsed:"Collapsed project", risk:"Risk link", normal:"Normal link", selected:"Selected project", average:"Average load", participants:"Participants", workItems:"Work items", members:"Project members", sorted:"Sorted by load", noRole:"No role", riskNotes:"Risk notes", workDetails:"Work details", ongoing:"Ongoing", outsidePeriod:"Outside the current baseline date", snapshotLoad:"Planned total load" } };
+const copy = computed(() => labels[props.language] || labels.zh); const usingDemo = computed(() => !props.memberLoad.length && !props.assignments.length);
+const demoPeople = [{member_id:1,name:"陈安",role:"后端工程师",allocated_percent:80,risk:"normal"},{member_id:2,name:"李敏",role:"前端工程师",allocated_percent:110,risk:"overloaded"},{member_id:3,name:"王越",role:"测试工程师",allocated_percent:60,risk:"blocked"},{member_id:4,name:"赵宁",role:"项目经理",allocated_percent:45,risk:"normal"}];
+const demoAssignments = [{id:"d1",member_id:1,project_id:1,project_name:"资源排期系统",task_name:"API 服务与资源模型",allocation_percent:50,status:"blocked"},{id:"d2",member_id:1,project_id:3,project_name:"数据同步服务",task_name:"同步服务技术预研",allocation_percent:30,status:"active"},{id:"d3",member_id:2,project_id:2,project_name:"客户门户改版",task_name:"Vue 工作台体验升级",allocation_percent:80,status:"active"},{id:"d4",member_id:2,project_id:1,project_name:"资源排期系统",task_name:"交互组件联调",allocation_percent:30,status:"planned"},{id:"d5",member_id:3,project_id:2,project_name:"客户门户改版",task_name:"回归测试计划",allocation_percent:40,status:"blocked"},{id:"d6",member_id:4,project_id:1,project_name:"资源排期系统",task_name:"需求梳理与交付节奏",allocation_percent:25,status:"active"}];
+const people = computed(() => (usingDemo.value ? demoPeople : props.memberLoad).map((load, index) => { const member = props.members.find(m => m.id === load.member_id) || {}; return { ...load, name: load.name || member.name || "—", role: load.role || member.role || "", avatar: index % 8 }; }));
+const allAssignments = computed(() => usingDemo.value ? demoAssignments : props.assignments);
+const visibleAssignments = computed(() => { const needle = query.value.toLowerCase(); return allAssignments.value.filter(a => { const p = people.value.find(x => x.member_id === a.member_id); return (!projectFilter.value || a.project_name === projectFilter.value) && (!needle || `${a.project_name} ${a.task_name} ${p?.name || ""}`.toLowerCase().includes(needle)); }); });
+const clusters = computed(() => { const map = new Map(); visibleAssignments.value.forEach(a => { const id = a.project_id || a.project_name; if (!map.has(id)) map.set(id, { id, name:a.project_name, status:a.status || "active", assignments:[] }); const item = map.get(id); item.assignments.push(a); if (a.status === "blocked") item.status = "blocked"; }); return [...map.values()].map(p => { const ids = [...new Set(p.assignments.map(a => a.member_id))]; const projectPeople = people.value.filter(person => ids.includes(person.member_id)).sort((a,b) => b.allocated_percent-a.allocated_percent); const currentAssignments = p.assignments.filter(isCurrentAssignment); return { ...p, people:projectPeople, totalLoad:p.assignments.reduce((sum,a)=>sum+Number(a.allocation_percent||0),0), load: projectPeople.length ? projectPeople.reduce((s,p) => s+Number(p.allocated_percent || 0),0)/projectPeople.length : 0, currentRisks:currentAssignments.filter(a => a.status === "blocked" || Number(a.allocation_percent) >= 70) }; }).sort((a,b) => b.people.length-a.people.length || b.assignments.length-a.assignments.length); });
+const selectedProject = computed(() => clusters.value.find(p => p.id === selectedProjectId.value) || clusters.value[0] || null); const selectedTaskMemberId = computed(() => selectedProject.value?.assignments.find(a => a.id === selectedTaskId.value)?.member_id || null); const visiblePeople = computed(() => new Set(visibleAssignments.value.map(a => a.member_id)).size); const crossPeople = computed(() => people.value.filter(p => new Set(visibleAssignments.value.filter(a => a.member_id === p.member_id).map(a => a.project_name)).size > 1).length);
+watch(clusters, ps => { if (!ps.some(p => p.id === selectedProjectId.value)) selectedProjectId.value = ps[0]?.id || null; }, {immediate:true}); watch(projectFilter, name => { if (name) selectedProjectId.value = clusters.value.find(p => p.name === name)?.id || null; });
+function reset(){ query.value=""; projectFilter.value=""; density.value=1; expandedMemberId.value=null; selectedTaskId.value=null; selectedProjectId.value=clusters.value[0]?.id || null; } function tone(status){ return status === "blocked" ? "blocked" : status === "paused" ? "paused" : "active"; } function statusLabel(status){ return (props.language === "en" ? {active:"Active",planned:"Planned",blocked:"Blocked",paused:"Paused",done:"Done"} : {active:"正常",planned:"计划",blocked:"阻塞",paused:"暂停",done:"完成"})[status] || "正常"; } function riskText(a){ return props.language === "en" ? (a.status === "blocked" ? "Blocked work needs attention." : "High allocation may create delivery risk.") : (a.status === "blocked" ? "任务已阻塞，需要尽快明确依赖与处理人。" : "占用比例较高，可能影响同一成员的其他交付。"); } function isCurrentAssignment(a){ const date=props.currentDate; if(!date) return true; if(!["active","planned","blocked"].includes(a.status)) return false; if(a.start_date > date) return a.status === "active" || a.status === "blocked"; return !a.end_date || a.end_date >= date; } function memberAssignments(person){ return selectedProject.value?.assignments.filter(a => a.member_id === person.member_id) || []; } function toggleMember(id){ expandedMemberId.value = expandedMemberId.value === id ? null : id; selectedTaskId.value=null; } function selectTask(memberId, assignmentId){ expandedMemberId.value=memberId; selectedTaskId.value=assignmentId; } function stageFor(a){ const match=(a.notes || "").match(/(?:Stage|阶段):\s*([^;]+)/i); return match?.[1] || (props.language === "en" ? "Assignment" : "安排"); }
+function pos(cluster){ if(cluster.id === selectedProjectId.value) return {x:50,y:50}; const others=clusters.value.filter(p=>p.id!==selectedProjectId.value); const n=others.findIndex(p=>p.id===cluster.id); const angle=(n/Math.max(others.length,1))*Math.PI*2-Math.PI/2; return {x:50+Math.cos(angle)*40,y:50+Math.sin(angle)*38}; } function colorFor(cluster){ const palette=[["#6656c6","#f2efff"],["#2878d4","#eef6ff"],["#27854c","#eff9f0"],["#db5b47","#fff1ef"],["#d28318","#fff6e8"],["#168494","#edf9fa"]]; const text=String(cluster.id); const hash=[...text].reduce((sum,char)=>sum+char.charCodeAt(0),0); return palette[hash%palette.length]; } function nodeStyle(cluster){const p=pos(cluster); const [color,bg]=colorFor(cluster); return {left:`${p.x}%`,top:`${p.y}%`,"--project-color":color,"--project-bg":bg};} function miniStyle(cluster){return nodeStyle(cluster);} function memberCanvasPosition(n,total){ const angle=(n/Math.min(total,8))*Math.PI*2-Math.PI/2; return {x:50+Math.cos(angle)*18,y:50+Math.sin(angle)*25}; } function memberCanvasStyle(n,total){const p=memberCanvasPosition(n,total);return {left:`${p.x}%`,top:`${p.y}%`};} function shortName(name){const value=String(name||"");return value.length>15?`${value.slice(0,13)}…`:value; } function selectProject(id){selectedProjectId.value=id;expandedMemberId.value=null;selectedTaskId.value=null;}
+const edges=computed(()=>clusters.value.filter(p=>p.id!==selectedProjectId.value).map(p=>{const target=pos(p),dx=target.x-50,dy=target.y-50,startRatio=.56,start={x:50+dx*startRatio,y:50+dy*startRatio},remaining=1-startRatio;return {id:`e${p.id}`,tone:p.currentRisks.length?"risk":"normal",style:{left:`${start.x}%`,top:`${start.y}%`,width:`${Math.hypot(dx,dy)*remaining}%`,transform:`rotate(${Math.atan2(dy,dx)}rad)`}};}));
+const memberEdges=computed(()=>selectedProject.value?.people.slice(0,8).map((person,index)=>{const target=memberCanvasPosition(index,selectedProject.value.people.length),dx=target.x-50,dy=target.y-50;return {id:`m${person.member_id}`,memberId:person.member_id,style:{left:"50%",top:"50%",width:`${Math.hypot(dx,dy)}%`,transform:`rotate(${Math.atan2(dy,dx)}rad)`}};})||[]);
 </script>
 
 <style scoped>
-.sandbox-view { display: grid; gap: 12px; }
-.sandbox-toolbar { display: flex; align-items: end; justify-content: flex-end; gap: 10px; }
-.sandbox-toolbar label { min-width: 170px; }
-.sandbox-search { display: flex; align-items: center; gap: 8px; min-width: 250px; height: 40px; border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 0 10px; color: var(--muted); }
-.sandbox-search input { min-height: 36px; border: 0; outline: 0; padding: 0; }
-.view-switch { display: flex; height: 40px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #fff; }
-.view-switch button { width: 46px; border: 0; border-right: 1px solid var(--line); background: #fff; color: var(--muted); }
-.view-switch button:last-child { border-right: 0; }
-.view-switch button.active { background: #dceafa; color: #234f84; }
-.demo-notice { display: flex; align-items: center; gap: 8px; border: 1px solid #f0d6a8; border-radius: 7px; background: #fff8ed; color: #8a5b08; padding: 9px 12px; font-size: 13px; }
-.sandbox-grid { display: grid; grid-template-columns: minmax(0, 1fr) 286px; gap: 14px; min-height: 690px; }
-.relationship-stage, .detail-panel { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
-.relationship-stage { display: flex; flex-direction: column; min-width: 0; padding: 16px; }
-.stage-heading { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 270px; margin-bottom: 12px; color: var(--ink); font-size: 14px; }
-.relationship-rows { display: grid; gap: 10px; }
-.relationship-row { display: grid; grid-template-columns: 160px 250px minmax(230px, 1fr); align-items: center; min-height: 124px; }
-.person-card { display: flex; align-items: center; gap: 10px; min-height: 108px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); padding: 12px; text-align: left; box-shadow: 0 8px 24px rgba(23, 32, 51, 0.06); }
-.relationship-row.selected .person-card { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(15, 107, 127, 0.1); }
-.person-card img { width: 48px; height: 48px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; }
-.person-copy { min-width: 0; }
-.person-copy strong, .person-copy small, .person-copy b, .person-copy em { display: block; }
-.person-copy strong { margin-bottom: 3px; }
-.person-copy small, .person-copy em { color: var(--muted); font-size: 11px; font-style: normal; white-space: nowrap; }
-.person-copy b { margin: 5px 0 1px; color: var(--primary); font-size: 20px; }
-.person-copy b.overloaded, .person-copy b.blocked { color: var(--red); }
-.person-copy b.tight { color: var(--yellow); }
-.connection-stack, .task-stack { display: grid; align-content: center; gap: 8px; }
-.connection-item { display: grid; grid-template-columns: minmax(0, 1fr) 45px; align-items: center; gap: 8px; }
-.connection-item i { display: block; width: 100%; border-radius: 99px; background: #9aa6b7; }
-.connection-item i.normal, .related-work i.normal { background: var(--primary); }
-.connection-item i.risk, .related-work i.risk { background: #f06b09; }
-.connection-item i.blocked, .related-work i.blocked { background: #e22b2b; }
-.connection-item b { color: var(--muted); font-size: 12px; }
-.connection-item i.risk + b, .connection-item i.blocked + b { color: #e85d08; }
-.connection-empty { color: var(--muted); font-size: 12px; text-align: center; }
-.task-card { display: grid; gap: 5px; min-height: 74px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); padding: 11px 12px; text-align: left; box-shadow: 0 5px 16px rgba(23, 32, 51, 0.05); }
-.task-card:hover { border-color: var(--primary); }
-.task-card.blocked { border-color: #efb2b2; }
-.task-card strong { font-size: 14px; }
-.task-card small { color: var(--muted); font-size: 11px; }
-.project-line { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
-.project-line em { margin-left: auto; border-radius: 4px; background: #e5f4ee; color: var(--green); padding: 3px 6px; font-style: normal; font-weight: 700; }
-.project-line em.blocked { background: #fdeaea; color: var(--red); }
-.project-line em.planned { background: #fff1e5; color: #d85f09; }
-.task-empty { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 72px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: 12px; }
-.sandbox-empty { display: grid; place-items: center; align-content: center; gap: 8px; min-height: 440px; color: var(--muted); }
-.sandbox-empty strong { color: var(--ink); }
-.sandbox-legend { display: flex; justify-content: space-between; gap: 20px; margin-top: auto; border-top: 1px solid var(--line); padding-top: 13px; font-size: 11px; color: var(--muted); }
-.sandbox-legend > div { display: flex; align-items: center; gap: 13px; }
-.sandbox-legend strong { color: var(--ink); }
-.sandbox-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.weight { display: inline-block; width: 28px; border-radius: 99px; background: #8d98aa; }
-.weight.thick { height: 6px; } .weight.medium { height: 4px; } .weight.thin { height: 2px; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: #9aa6b7; }
-.dot.overload { background: #e22b2b; } .dot.risk { background: #f06b09; } .dot.normal { background: var(--primary); }
-.detail-panel { align-self: start; overflow: hidden; }
-.detail-head { display: flex; align-items: center; gap: 12px; padding: 18px; border-bottom: 1px solid var(--line); }
-.detail-head img { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; }
-.detail-head strong, .detail-head span { display: block; }
-.detail-head span { margin: 3px 0 7px; color: var(--muted); font-size: 12px; }
-.detail-head em { color: var(--green); font-size: 12px; font-style: normal; font-weight: 700; }
-.detail-head em.overloaded, .detail-head em.blocked { color: var(--red); }
-.capacity-overview, .related-work, .risk-note { padding: 16px 18px; border-bottom: 1px solid var(--line); }
-.detail-panel h3 { margin: 0 0 13px; font-size: 14px; }
-.capacity-overview { display: grid; grid-template-columns: 94px 1fr; column-gap: 12px; }
-.capacity-overview h3 { grid-column: 1 / -1; }
-.capacity-chart { position: relative; width: 92px; height: 92px; }
-.capacity-chart svg { width: 92px; height: 92px; transform: rotate(-90deg); }
-.capacity-chart circle { fill: none; stroke-width: 10; }
-.ring-track { stroke: #e7edf5; }
-.ring-value { stroke: var(--primary); stroke-linecap: round; }
-.ring-value.overloaded, .ring-value.blocked { stroke: var(--red); }
-.capacity-chart > strong { position: absolute; inset: 0; display: grid; place-items: center; font-size: 21px; }
-.capacity-chart small { font-size: 12px; }
-.capacity-numbers { display: grid; align-content: center; gap: 2px; }
-.capacity-numbers strong { margin-top: 5px; font-size: 13px; }
-.capacity-numbers span { color: var(--muted); font-size: 11px; }
-.related-work { display: grid; gap: 7px; }
-.related-work h3 { margin-bottom: 5px; }
-.related-work button { position: relative; display: grid; gap: 3px; border: 0; border-left: 2px solid transparent; background: transparent; color: var(--ink); padding: 7px 8px 7px 10px; text-align: left; }
-.related-work button:hover, .related-work button.active { border-left-color: var(--primary); background: var(--surface-soft); }
-.related-work button span { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; }
-.related-work button i { width: 7px; height: 7px; border-radius: 50%; }
-.related-work button strong { padding-right: 42px; font-size: 12px; }
-.related-work button b { position: absolute; right: 8px; bottom: 8px; color: var(--primary); font-size: 12px; }
-.risk-note { border-bottom: 0; }
-.risk-note > div { display: flex; gap: 8px; border: 1px solid #f0d6a8; border-radius: 7px; background: #fff8ed; color: #dc620a; padding: 10px; }
-.risk-note p { margin: 0; }
-.risk-note strong, .risk-note span { display: block; }
-.risk-note strong { margin-bottom: 4px; font-size: 12px; }
-.risk-note span { color: #805317; font-size: 11px; line-height: 1.5; }
-.list-mode .relationship-row { grid-template-columns: 160px 0 minmax(230px, 1fr); gap: 14px; }
-.list-mode .connection-stack { overflow: hidden; }
-@media (max-width: 1280px) {
-  .sandbox-grid { grid-template-columns: 1fr; }
-  .detail-panel { display: grid; grid-template-columns: repeat(3, 1fr); }
-  .detail-head { border-right: 1px solid var(--line); }
-  .capacity-overview, .related-work { border-right: 1px solid var(--line); border-bottom: 0; }
-  .risk-note { border-bottom: 0; }
-}
-@media (max-width: 900px) {
-  .sandbox-toolbar { align-items: stretch; flex-direction: column; }
-  .sandbox-toolbar label, .sandbox-search { min-width: 0; }
-  .stage-heading { display: none; }
-  .relationship-row { grid-template-columns: 140px 90px minmax(220px, 1fr); }
-  .detail-panel { grid-template-columns: 1fr; }
-  .detail-head, .capacity-overview, .related-work { border-right: 0; border-bottom: 1px solid var(--line); }
-  .sandbox-legend { align-items: flex-start; flex-direction: column; }
-  .sandbox-legend > div { flex-wrap: wrap; }
-}
+.sandbox-view{display:grid;gap:12px}.sandbox-toolbar{display:flex;align-items:end;justify-content:flex-end;flex-wrap:wrap;gap:10px}.sandbox-toolbar label{min-width:160px}.sandbox-toolbar label span,.density span{display:block;margin-bottom:5px;color:var(--muted);font-size:12px}.sandbox-toolbar select{width:100%;min-height:38px}.sandbox-search{display:flex;align-items:center;gap:8px;min-width:245px;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--muted)}.sandbox-search input{width:100%;border:0;outline:0;background:transparent}.density{width:94px!important}.density input{width:100%;accent-color:var(--primary)}.reset{display:flex;align-items:center;gap:6px;min-height:38px;padding:0 11px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--muted)}.demo-notice,.sandbox-summary{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:7px;font-size:13px}.demo-notice{border:1px solid #f0d6a8;background:#fff8ed;color:#8a5b08}.sandbox-summary{justify-content:flex-end;color:var(--muted)}.sandbox-summary b{color:var(--ink);font-size:15px}.sandbox-summary i{width:3px;height:3px;border-radius:50%;background:var(--line)}.cross{display:flex;align-items:center;gap:4px;color:#16798a}.sandbox-grid{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:14px;min-height:670px}.constellation-stage,.detail-panel{border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:var(--shadow)}.constellation-stage{display:flex;min-width:0;flex-direction:column;overflow:hidden}.stage-meta{display:flex;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);color:var(--ink)}.stage-meta small{color:var(--muted);font-weight:400}.canvas{position:relative;min-height:545px;overflow:hidden;background-color:#f9fbff;background-image:radial-gradient(#dce5f3 1px,transparent 1px);background-size:20px 20px}.edge{position:absolute;z-index:1;height:2px;transform-origin:0 50%;opacity:.65}.edge.normal{background:#1b8392}.edge.risk{height:3px;background:#f07b24}.project-node{position:absolute;z-index:2;display:grid;gap:6px;width:calc(140px * var(--node-scale));min-height:calc(102px * var(--node-scale));padding:11px;transform:translate(-50%,-50%);border:1px solid #d9e2ef;border-radius:11px;background:rgba(255,255,255,.97);color:var(--ink);text-align:left;box-shadow:0 8px 20px rgba(28,49,80,.08);transition:.2s}.project-node:hover,.project-node.selected{border-color:#177f90;box-shadow:0 0 0 3px rgba(23,127,144,.12),0 14px 28px rgba(28,49,80,.12)}.project-node.selected{z-index:3;width:calc(178px * var(--node-scale));min-height:calc(126px * var(--node-scale))}.node-top,.node-metrics{display:flex;align-items:center;justify-content:space-between;gap:6px}.project-icon,.detail-icon{display:grid;place-items:center;width:25px;height:25px;border-radius:7px}.project-icon.active,.detail-icon.active{background:#e5f4f5;color:#147d8c}.project-icon.blocked,.detail-icon.blocked{background:#fff0e5;color:#db6712}.project-icon.paused,.detail-icon.paused{background:#f0effb;color:#7664c5}.project-node em,.detail-head em{font-style:normal;font-size:11px;font-weight:700}.project-node em.active,.detail-head em.active{color:#147d8c}.project-node em.blocked,.detail-head em.blocked{color:#d75a16}.project-node em.paused,.detail-head em.paused{color:#7664c5}.project-node strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.node-metrics{color:var(--muted);font-size:11px}.node-metrics b:last-child{color:#167f8d}.orbit{position:absolute;inset:-25px;pointer-events:none}.orbit-avatar{position:absolute;transform:translate(-50%,-50%)}.pixel-avatar{display:inline-block;position:relative;width:27px;height:27px;overflow:hidden;border:2px solid #fff;border-radius:8px;background:#edf2f7;box-shadow:0 2px 6px rgba(24,43,68,.15);vertical-align:middle}.pixel-avatar img{position:absolute;width:400%!important;height:200%!important;max-width:none!important;transform-origin:top left}.canvas-buttons{position:absolute;z-index:5;right:16px;top:16px;display:grid;overflow:hidden;border:1px solid var(--line);border-radius:7px;background:#fff}.canvas-buttons button{display:grid;place-items:center;width:32px;height:31px;border:0;border-bottom:1px solid var(--line);background:#fff;color:var(--muted)}.canvas-buttons button:last-child{border-bottom:0}.minimap{position:absolute;right:16px;bottom:16px;width:112px;height:82px;overflow:hidden;border:1px solid #dce5ef;border-radius:7px;background:rgba(255,255,255,.88)}.minimap span{position:absolute;width:6px;height:6px;transform:translate(-50%,-50%);border-radius:50%;background:#aab8c8}.minimap span.active{width:11px;height:11px;background:#177f90}.legend{display:flex;flex-wrap:wrap;gap:16px;padding:12px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}.legend span{display:flex;align-items:center;gap:6px}.node-dot{width:11px;height:11px;border:1px solid #cbd7e6;border-radius:3px;background:#fff}.node-dot.selected{border-color:#177f90;background:#e5f4f5}.line-dot{width:18px;height:2px}.line-dot.risk{background:#f07b24}.line-dot.normal{background:#1b8392}.detail-panel{padding:16px}.detail-head{display:flex;gap:10px;padding-bottom:14px;border-bottom:1px solid var(--line)}.detail-icon{flex:0 0 auto;width:34px;height:34px}.detail-head div{display:grid;gap:2px}.detail-head span{color:var(--muted);font-size:11px}.detail-head strong{font-size:16px}.capacity{display:flex;align-items:center;gap:17px;padding:17px 0;border-bottom:1px solid var(--line)}.ring{display:grid;place-content:center;width:86px;height:86px;border-radius:50%;background:conic-gradient(#177f90 var(--progress),#e7edf3 0);text-align:center}.ring:before{content:"";position:absolute;width:66px;height:66px;border-radius:50%;background:#fff}.ring b,.ring small{z-index:1}.ring b{font-size:19px}.ring small{color:var(--muted);font-size:10px}.capacity>div:last-child{display:grid;gap:2px}.capacity strong{font-size:14px}.capacity span{color:var(--muted);font-size:11px}.members{padding:16px 0}.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.section-title h3{margin:0;font-size:13px}.section-title span{color:var(--muted);font-size:10px}.member{display:grid;grid-template-columns:30px 1fr auto;align-items:center;width:100%;gap:8px;padding:8px 0;border:0;border-bottom:1px solid #edf1f5;background:transparent;color:var(--ink);text-align:left}.member:hover{background:#f7fafc}.member .pixel-avatar{width:26px;height:26px}.member span{display:grid;gap:1px;min-width:0}.member strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.member small{color:var(--muted);font-size:10px}.member b{font-size:12px}.member b.overloaded,.member b.blocked{color:#d96019}.member b.tight{color:#b87914}.member b.normal,.member b.underused{color:#167f8d}.risk-note{border-top:1px solid var(--line);padding-top:14px}.risk-note>div:last-child{display:flex;gap:8px;padding:9px;border-radius:7px;background:#fff5eb;color:#9a4d15}.risk-note span{display:grid;gap:3px;font-size:11px}.risk-note strong{font-size:12px}@media(max-width:1050px){.sandbox-grid{grid-template-columns:1fr}.detail-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.detail-head,.capacity{border-bottom:0}.members,.risk-note{border-top:1px solid var(--line)}}@media(max-width:680px){.sandbox-toolbar{justify-content:stretch}.sandbox-toolbar label,.sandbox-search{min-width:100%}.canvas{min-height:620px}.project-node{width:112px}.project-node.selected{width:142px}.stage-meta small{display:none}.detail-panel{display:block}}
+.project-node.task-focused{box-shadow:0 0 0 4px rgba(23,127,144,.22),0 15px 30px rgba(28,49,80,.16)}.orbit-avatar.focused .pixel-avatar{border-color:#177f90;box-shadow:0 0 0 3px rgba(23,127,144,.22),0 2px 7px rgba(24,43,68,.2)}.member-item{border-bottom:1px solid #edf1f5}.member-item.expanded{background:#f8fbfd}.member-item.expanded .member{border-bottom:0}.member-chevron{color:var(--muted);transition:transform .18s ease}.member-item.expanded .member-chevron{transform:rotate(180deg);color:#167f8d}.member-details{display:grid;gap:7px;padding:3px 8px 12px 38px}.detail-caption{color:var(--muted);font-size:10px;font-weight:700}.task-detail{display:grid;gap:5px;width:100%;border:1px solid #dce6ef;border-radius:7px;background:#fff;padding:9px;color:var(--ink);text-align:left}.task-detail:hover,.task-detail.selected{border-color:#177f90;box-shadow:0 0 0 2px rgba(23,127,144,.1)}.task-detail.inactive{background:#fbfcfd;color:#627287}.task-detail-head,.task-meta{display:flex;align-items:start;justify-content:space-between;gap:8px}.task-detail-head strong{font-size:12px;line-height:1.35}.task-detail-head em{font-style:normal;font-size:10px;font-weight:700}.task-detail-head em.active{color:#147d8c}.task-detail-head em.blocked{color:#d75a16}.task-meta{color:var(--muted);font-size:10px}.task-meta b:last-child{color:#167f8d}.task-period,.task-detail small{color:var(--muted);font-size:10px;line-height:1.35}.outside-period{color:#9a6b18;font-size:10px;font-weight:700}
+.canvas{min-height:620px}
+.project-domain{position:absolute;left:50%;top:50%;z-index:1;width:58%;height:62%;transform:translate(-50%,-50%);border:1px dashed #afd8df;border-radius:50%;background:rgba(235,248,250,.78)}
+.edge{z-index:2;height:1px;opacity:.4}.edge.normal{background:#9db6c7}.edge.risk{height:1.5px;background:#e8a06e}
+.member-edge{position:absolute;z-index:2;height:1.5px;transform-origin:0 50%;background:#46a0ad;opacity:.6;transition:opacity .18s,height .18s}.member-edge.focused{height:3px;opacity:1}
+.canvas-member{position:absolute;z-index:4;display:grid;place-items:center;gap:3px;width:94px;padding:4px;transform:translate(-50%,-50%);border:0;background:transparent;color:var(--ink);text-align:center}.canvas-member:hover,.canvas-member.expanded{color:#126f7c}.canvas-member.focused{filter:drop-shadow(0 0 6px rgba(23,127,144,.28))}.canvas-member .pixel-avatar{width:34px;height:34px;border-radius:50%}.canvas-member.focused .pixel-avatar,.canvas-member.expanded .pixel-avatar{border-color:#1b8b9a;box-shadow:0 0 0 3px rgba(23,127,144,.16)}.canvas-member>span:last-child{display:grid;gap:1px;max-width:90px}.canvas-member strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}.canvas-member small{color:#cb6a17;font-size:10px;font-weight:700}
+.project-node{z-index:3;place-content:center;gap:5px;width:calc(106px * var(--node-scale));height:calc(106px * var(--node-scale));min-height:0;padding:12px;overflow:hidden;border:1px dashed var(--project-color);border-radius:50%;background:var(--project-bg);color:var(--project-color);text-align:center;box-shadow:none}.project-node:hover{border-color:var(--project-color);box-shadow:0 8px 18px rgba(35,59,85,.1)}.project-node:not(.selected) .node-top{display:none}.project-node strong{font-size:12px}.project-node .node-metrics{display:grid;justify-content:center;gap:2px}.project-node .node-metrics b{color:#5b687b;font-size:9px;font-weight:600}.project-node .node-metrics b:last-child{color:var(--project-color);font-size:15px;font-weight:800}.load-badge{justify-self:center;padding:2px 6px;border:1px solid #f0a05e;border-radius:5px;background:#fff;color:#d8751c;font-size:8px;font-weight:700}
+.project-node.selected{z-index:5;width:calc(190px * var(--node-scale));height:calc(88px * var(--node-scale));min-height:0;border:0;border-radius:999px;background:#168896;color:#fff;box-shadow:0 12px 26px rgba(24,91,105,.23)}.project-node.selected:hover{border:0;box-shadow:0 14px 30px rgba(24,91,105,.28)}.project-node.selected .node-top{display:none}.project-node.selected>strong{font-size:14px}.project-node.selected .node-metrics{display:flex;color:#dff5f7}.project-node.selected .node-metrics b,.project-node.selected .node-metrics b:last-child{color:#e8fbfc;font-size:10px}.project-node.selected .load-badge{border-color:#ffd3a6;background:#fff8ed;color:#cc6814}.project-node.task-focused{box-shadow:0 0 0 4px rgba(23,127,144,.18),0 15px 30px rgba(28,49,80,.18)}
+.canvas-buttons,.minimap{z-index:6}
+@media(max-width:680px){.project-domain{width:72%;height:56%}.project-node{width:calc(88px * var(--node-scale));height:calc(88px * var(--node-scale));padding:8px}.project-node.selected{width:calc(154px * var(--node-scale));height:calc(76px * var(--node-scale))}.canvas-member{width:72px}.canvas-member .pixel-avatar{width:30px;height:30px}.project-node strong{font-size:10px}.load-badge{display:none}}
+:deep(.pixel-avatar img){position:absolute;width:400%!important;height:200%!important;max-width:none!important;transform-origin:top left}
 </style>

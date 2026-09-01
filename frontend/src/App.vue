@@ -62,6 +62,7 @@
       <ResourceSandbox
         v-if="view === 'sandbox'"
         :language="language"
+        :current-date="currentDate"
         :members="members"
         :assignments="assignments"
         :member-load="memberLoad"
