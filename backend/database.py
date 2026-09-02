@@ -75,6 +75,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 member_id INTEGER NOT NULL,
                 project_id INTEGER NOT NULL,
+                project_pm_item TEXT NOT NULL DEFAULT '',
                 task_name TEXT NOT NULL,
                 allocation_percent REAL NOT NULL DEFAULT 50,
                 start_date TEXT NOT NULL,
@@ -132,6 +133,7 @@ def init_db():
         ensure_column(conn, "assignments", "import_batch_id", "INTEGER")
         ensure_column(conn, "assignments", "source_key", "TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "assignments", "source_type", "TEXT NOT NULL DEFAULT 'manual'")
+        ensure_column(conn, "assignments", "project_pm_item", "TEXT NOT NULL DEFAULT ''")
 
 
 def ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, definition: str):

@@ -26,6 +26,7 @@ class ProjectIn(BaseModel):
 class AssignmentIn(BaseModel):
     member_id: int
     project_id: int
+    project_pm_item: str = ""
     task_name: str = Field(min_length=1)
     allocation_percent: float = Field(default=50, ge=0, le=200)
     start_date: str = Field(min_length=1)

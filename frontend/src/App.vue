@@ -169,6 +169,10 @@
               </select>
             </label>
             <label class="span-2">
+              <span>{{ t.projectPmItem }}</span>
+              <input v-model.trim="assignmentForm.project_pm_item" :placeholder="t.projectPmItemPlaceholder" />
+            </label>
+            <label class="span-2">
               <span>{{ t.taskName }}</span>
               <input v-model.trim="assignmentForm.task_name" required :placeholder="t.taskPlaceholder" />
             </label>
@@ -248,6 +252,7 @@
                 <tr>
                   <th>{{ t.member }}</th>
                   <th>{{ t.project }}</th>
+                  <th>{{ t.projectPmItem }}</th>
                   <th>{{ t.task }}</th>
                   <th>{{ t.allocation }}</th>
                   <th>{{ t.status }}</th>
@@ -262,6 +267,7 @@
                     <span>{{ item.member_role }}</span>
                   </td>
                   <td>{{ item.project_name }}</td>
+                  <td>{{ item.project_pm_item || t.notSet }}</td>
                   <td>{{ item.task_name }}</td>
                   <td>{{ item.allocation_percent }}%</td>
                   <td><span class="status-pill" :class="item.status">{{ statusLabel(item.status) }}</span></td>
@@ -647,6 +653,7 @@
                   <th>{{ t.sourceRow }}</th>
                   <th>{{ t.member }}</th>
                   <th>{{ t.project }}</th>
+                  <th>{{ t.projectPmItem }}</th>
                   <th>{{ t.task }}</th>
                   <th>{{ t.stage }}</th>
                   <th>{{ t.allocation }}</th>
@@ -657,6 +664,7 @@
                   <td>{{ item.row }}</td>
                   <td>{{ item.member_name }}</td>
                   <td>{{ item.project_name }}</td>
+                  <td>{{ item.project_pm_item || t.notSet }}</td>
                   <td>{{ item.task_name }}</td>
                   <td>{{ item.stage }}</td>
                   <td>{{ item.allocation_percent }}%</td>
@@ -785,6 +793,8 @@ const translations = {
     selectProject: "选择项目",
     taskName: "任务/职责",
     taskPlaceholder: "例如：支付模块接口联调",
+    projectPmItem: "项目 PM",
+    projectPmItemPlaceholder: "例如：张三",
     allocationPercent: "占用比例",
     priority: "优先级",
     high: "高",
@@ -805,8 +815,8 @@ const translations = {
     saveChanges: "保存修改",
     clear: "清空",
     assignmentList: "安排列表",
-    assignmentListDescription: "搜索同事、项目或任务，快速定位安排。",
-    searchPlaceholder: "搜索同事、项目、任务",
+    assignmentListDescription: "搜索同事、项目、项目 PM 或任务，快速定位安排。",
+    searchPlaceholder: "搜索同事、项目、项目 PM、任务",
     allStatuses: "全部状态",
     task: "任务",
     allocation: "占用",
@@ -952,6 +962,8 @@ const translations = {
     selectProject: "Select project",
     taskName: "Task / Responsibility",
     taskPlaceholder: "Example: Payment API integration",
+    projectPmItem: "Project PM",
+    projectPmItemPlaceholder: "Example: Jordan Lee",
     allocationPercent: "Allocation percent",
     priority: "Priority",
     high: "High",
@@ -972,8 +984,8 @@ const translations = {
     saveChanges: "Save Changes",
     clear: "Clear",
     assignmentList: "Assignment List",
-    assignmentListDescription: "Search members, projects, or tasks to find assignments quickly.",
-    searchPlaceholder: "Search member, project, task",
+    assignmentListDescription: "Search members, projects, project PMs, or tasks to find assignments quickly.",
+    searchPlaceholder: "Search member, project, project PM, task",
     allStatuses: "All statuses",
     task: "Task",
     allocation: "Allocation",
@@ -1144,7 +1156,7 @@ const sortedLoads = computed(() => {
 const filteredAssignments = computed(() => {
   const needle = search.value.toLowerCase();
   return assignments.value.filter((item) => {
-    const text = `${item.member_name} ${item.project_name} ${item.task_name}`.toLowerCase();
+    const text = `${item.member_name} ${item.project_name} ${item.project_pm_item || ""} ${item.task_name}`.toLowerCase();
     return (!needle || text.includes(needle)) && (!statusFilter.value || item.status === statusFilter.value);
   });
 });
@@ -1184,6 +1196,7 @@ function defaultAssignmentForm() {
   return {
     member_id: "",
     project_id: "",
+    project_pm_item: "",
     task_name: "",
     allocation_percent: 50,
     start_date: currentDate?.value || today,
@@ -1359,6 +1372,7 @@ function editAssignment(item) {
   Object.assign(assignmentForm, {
     member_id: item.member_id,
     project_id: item.project_id,
+    project_pm_item: item.project_pm_item || "",
     task_name: item.task_name,
     allocation_percent: item.allocation_percent,
     start_date: item.start_date,

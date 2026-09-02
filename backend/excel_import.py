@@ -290,6 +290,7 @@ def parse_resource_workbook(content: bytes, filename: str) -> dict:
                     "row": row_number,
                     "member_name": first,
                     "project_name": current_section or "未分组",
+                    "project_pm_item": hkpm,
                     "task_name": task,
                     "stage": stage,
                     "fte": fte,
