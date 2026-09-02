@@ -196,12 +196,13 @@ def create_assignment(conn: sqlite3.Connection, payload: AssignmentIn):
     cur = conn.execute(
         """
         INSERT INTO assignments
-        (member_id, project_id, task_name, allocation_percent, start_date, end_date, status, priority, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (member_id, project_id, project_pm_item, task_name, allocation_percent, start_date, end_date, status, priority, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["member_id"],
             data["project_id"],
+            data["project_pm_item"].strip(),
             data["task_name"].strip(),
             data["allocation_percent"],
             data["start_date"],
@@ -434,13 +435,14 @@ def apply_excel_import(conn: sqlite3.Connection, preview: dict, mode: str):
         conn.execute(
             """
             INSERT INTO assignments
-            (member_id, project_id, task_name, allocation_percent, start_date, end_date,
+            (member_id, project_id, project_pm_item, task_name, allocation_percent, start_date, end_date,
              status, priority, notes, created_at, updated_at, import_batch_id, source_key, source_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'excel')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'excel')
             """,
             (
                 member_id,
                 project_id,
+                assignment["project_pm_item"],
                 assignment["task_name"],
                 assignment["allocation_percent"],
                 assignment["start_date"],
@@ -479,13 +481,14 @@ def update_assignment(conn: sqlite3.Connection, assignment_id: int, payload: Ass
     cur = conn.execute(
         """
         UPDATE assignments
-        SET member_id = ?, project_id = ?, task_name = ?, allocation_percent = ?,
+        SET member_id = ?, project_id = ?, project_pm_item = ?, task_name = ?, allocation_percent = ?,
             start_date = ?, end_date = ?, status = ?, priority = ?, notes = ?, updated_at = ?
         WHERE id = ?
         """,
         (
             data["member_id"],
             data["project_id"],
+            data["project_pm_item"].strip(),
             data["task_name"].strip(),
             data["allocation_percent"],
             data["start_date"],

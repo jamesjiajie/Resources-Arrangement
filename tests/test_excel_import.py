@@ -83,6 +83,7 @@ class ParseResourceWorkbookTests(unittest.TestCase):
         assignment = preview["assignments"][0]
         self.assertEqual(assignment["project_name"], "Project Alpha")
         self.assertEqual(assignment["stage"], "Implementation")
+        self.assertEqual(assignment["project_pm_item"], "Manager A")
         self.assertEqual(assignment["task_name"], "Implementation task")
         self.assertEqual(assignment["allocation_percent"], 75)
 
