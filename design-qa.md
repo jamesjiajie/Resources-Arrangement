@@ -60,6 +60,41 @@ No actionable P0, P1, or P2 differences were found in the expanded-member state.
 
 final result: passed
 
+**Work-detail simplification iteration**
+
+- Source visual truth: `/Users/james/.codex/generated_images/019ff09c-4e1d-7ba3-a54e-173d3517ec23/exec-061f3d05-7b6f-4ec2-b353-b46988bdca3b.png` (selected first work-detail direction).
+- Implementation: browser-rendered Resource Sandbox at `http://127.0.0.1:8000/`, captured in the Codex in-app browser during this QA run.
+- Viewport: 1280 × 720 CSS pixels, desktop, Chinese UI; source is an image-generation mock at 1212 × 1296 pixels, so the comparison is normalized to the expanded-member detail region rather than full-screen scale.
+- State: `Commercial Fixed` selected; `Cai, Wayne WC` expanded; the first assignment selected.
+
+**Full-view and focused comparison evidence**
+
+The reference and the browser-rendered implementation were viewed together in the QA pass. The implementation uses the source's label-and-value hierarchy within the actual 290px inspector: work content is first and uses the full available row width; status, allocation, and period follow as light, divider-separated rows; the out-of-baseline warning uses amber. The existing pixel avatar and member header remain intact.
+
+**Findings**
+
+No actionable P0, P1, or P2 differences were found.
+
+- [P3] The production inspector is materially narrower than the generated mock, so the supplied long English task title wraps to two lines. This preserves the intended work-first hierarchy and avoids truncating the task.
+
+**Required fidelity surfaces**
+
+- Fonts and typography: existing product type scale is retained; the task title is the strongest detail text, with 10–11px metadata labels and status values.
+- Spacing and layout rhythm: the nested rounded card was removed. Rows use lightweight dividers and a compact vertical rhythm compatible with multiple assignments.
+- Colors and visual tokens: existing navy text, teal status/allocation values, muted label text, and amber period warning are preserved.
+- Image quality and asset fidelity: the existing pixel avatar remains unchanged and renders crisply in the expanded member header.
+- Copy and content: the detail only shows work content, status, allocation, time range, and the date-context warning. `Implementation`, PM, Stage, Source, and HKPM are absent.
+
+**Primary interactions tested**
+
+1. Opened Resource Sandbox and expanded `Cai, Wayne WC`.
+2. Selected the assignment and confirmed exactly one task is selected.
+3. Checked rendered detail text: no `Implementation`, PM, Stage, Source, or HKPM content is present.
+4. Confirmed browser console errors and warnings: none.
+5. Confirmed production build and Python test suite pass.
+
+final result: passed
+
 **Constellation hierarchy fidelity iteration**
 
 - Rechecked against the same approved source at a 1280 × 720 desktop viewport after replacing the uniform rectangular spoke layout.
