@@ -10,10 +10,10 @@
     "api": ".venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
   },
   "dependencies": {
+    "@lucide/vue": "^1.16.0",
     "@vitejs/plugin-vue": "^6.0.3",
+    "three": "^0.185.1",
     "vite": "^7.3.0",
-    "vue": "^3.5.25",
-    "@lucide/vue": "^1.16.0"
-  },
-  "devDependencies": {}
+    "vue": "^3.5.25"
+  }
 }

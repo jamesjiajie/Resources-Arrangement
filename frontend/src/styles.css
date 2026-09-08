@@ -17,6 +17,15 @@
   --shadow: 0 18px 44px rgba(23, 32, 51, 0.08);
 }
 
+@media (max-width: 1100px) {
+  .lab-shell .side-panel { display: flex; flex-direction: row; align-items: center; gap: 12px; min-width: 0; position: static; }
+  .lab-shell .brand { display: none; }
+  .lab-shell .side-summary { display: none; }
+  .lab-shell .nav-list { display: flex; min-width: 0; max-width: 100%; overflow-x: auto; gap: 4px; }
+  .lab-shell .nav-list button { flex-shrink: 0; width: auto; padding: 0 10px; white-space: nowrap; }
+  .lab-shell .nav-list span { display: inline; }
+}
+
 * {
   box-sizing: border-box;
 }

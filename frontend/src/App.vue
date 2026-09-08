@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'lab-shell': view === 'lab' }">
     <aside class="side-panel">
       <div class="brand">
         <div class="brand-mark">RA</div>
@@ -66,6 +66,17 @@
         :members="members"
         :assignments="assignments"
         :member-load="memberLoad"
+      />
+
+      <ResourceSandboxLab
+        v-if="view === 'lab'"
+        :language="language"
+        :current-date="currentDate"
+        :members="members"
+        :projects="projects"
+        :assignments="assignments"
+        :member-load="memberLoad"
+        @change-date="currentDate = $event; loadData()"
       />
 
       <section v-if="view === 'dashboard'" class="dashboard-view">
@@ -693,7 +704,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, defineAsyncComponent, onMounted, reactive, ref } from "vue";
 import AlertTriangle from "@lucide/vue/dist/esm/icons/triangle-alert.mjs";
 import BarChart3 from "@lucide/vue/dist/esm/icons/chart-bar.mjs";
 import BriefcaseBusiness from "@lucide/vue/dist/esm/icons/briefcase-business.mjs";
@@ -715,8 +726,11 @@ import Trash2 from "@lucide/vue/dist/esm/icons/trash-2.mjs";
 import UserPlus from "@lucide/vue/dist/esm/icons/user-plus.mjs";
 import Users from "@lucide/vue/dist/esm/icons/users.mjs";
 import ResourceSandbox from "./components/ResourceSandbox.vue";
+import FlaskConical from "@lucide/vue/dist/esm/icons/flask-conical.mjs";
 
-const today = new Date().toISOString().slice(0, 10);
+const ResourceSandboxLab = defineAsyncComponent(() => import("./components/ResourceSandboxLab.vue"));
+
+const today = new Date().toLocaleDateString('en-CA');
 const savedLanguage = window.localStorage.getItem("language");
 const language = ref(savedLanguage === "en" ? "en" : "zh");
 const view = ref("dashboard");
@@ -1093,6 +1107,7 @@ const navigation = computed(() => [
   { id: "projects", label: t.value.projects, icon: FolderKanban },
   { id: "tasks", label: t.value.tasks, icon: ListChecks },
   { id: "sandbox", label: t.value.sandbox, icon: Network },
+  { id: "lab", label: language.value === "zh" ? "实验性" : "Experimental", icon: FlaskConical },
   { id: "imports", label: t.value.imports, icon: FileUp },
 ]);
 
@@ -1127,11 +1142,13 @@ const viewTitle = computed(() => {
     projects: t.value.projectsTitle,
     tasks: t.value.tasksTitle,
     sandbox: t.value.sandboxTitle,
+    lab: language.value === "zh" ? "资源沙盘 · 实验室" : "Resource sandbox · Lab",
     imports: t.value.excelImportTitle,
   }[view.value];
 });
 
 const viewDescription = computed(() => {
+  if (view.value === "lab") return language.value === "zh" ? "空间资源岛 — 看见人力分布，探索项目之间的协作。" : "Resource islands — explore people, capacity and project connections.";
   return view.value === "sandbox" ? t.value.sandboxDescription : t.value.topbarDescription;
 });
 

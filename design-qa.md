@@ -109,3 +109,38 @@ final result: passed
 No actionable P0, P1, or P2 fidelity or interaction issues were found in the revised hierarchy.
 
 final result: passed
+**Current experimental 3D lab QA (2026-09-08)**
+
+- Source visual truth: `/Users/james/Document/Projects/Resources-Arrangement/docs/resource-sandbox-lab/reference.png` (selected first generated direction).
+- Implementation evidence: `/Users/james/Document/Projects/Resources-Arrangement/docs/resource-sandbox-lab/desktop.png`; focused state `/Users/james/Document/Projects/Resources-Arrangement/docs/resource-sandbox-lab/focused.png`; narrow-screen evidence `/Users/james/Document/Projects/Resources-Arrangement/docs/resource-sandbox-lab/mobile.png`.
+- Viewports: desktop 1487 × 1058 CSS pixels, mobile 390 × 844 CSS pixels. The source is 1488 × 1058; the desktop comparison uses the same overall dimensions.
+- State: experimental lab, sample data, selected `李敏`, selected project `资源排期系统`.
+
+**Full-view and focused comparison evidence**
+
+The rendered desktop view keeps the existing navy sidebar, pale workspace, metric strip, toolbar, large spatial canvas, minimap, bottom view controls, and right inspector from the selected direction. The canvas renders actual Three.js islands, member tokens, trees, labels, and relationship curves. The focused capture shows the selected member's 110% load and both linked work items. The mobile capture keeps the navigation usable without horizontal document overflow.
+
+**Required fidelity surfaces**
+
+- Fonts and typography: existing product system font and hierarchy are retained; canvas labels are compact and the inspector remains readable.
+- Spacing and layout rhythm: the canvas occupies the main workspace, with the inspector fixed to the right on desktop and stacked below on narrow screens.
+- Colors and visual tokens: navy shell, teal primary, pale gray workspace, restrained borders, and amber/red risk semantics match the existing product language and selected reference.
+- Image quality and asset fidelity: provided raster avatar assets render in the inspector and selected 3D labels; the 3D scene uses native Three.js geometry for the requested spatial interaction.
+- Copy and content: project, person, task, status, allocation, time range, baseline date, cross-project count, risk count, density, reset, top view, orbit, and sample/live data labels are visible.
+
+**Primary interactions tested**
+
+1. Opened the new `实验性` navigation entry without changing the existing `资源沙盘` route.
+2. Switched to sample data and selected `李敏`; inspector updated to 110% and showed both assignments.
+3. Verified project search empty state, project filter, project list view, and task selection that focuses the related project.
+4. Verified zoom, top view, orbit mode, reset, English toggle, and the original sandbox entry.
+5. Dragged the canvas and confirmed the projected labels changed, proving the 3D camera rotated.
+6. Verified the live date warning and the jump to the latest allocation date; live load changed from 0% on 2026-09-08 to 100% on 2026-08-31.
+7. Browser console showed no errors. An old cached bundle emitted a deprecation warning for `PCFSoftShadowMap`; the current source uses `PCFShadowMap`.
+8. `node --test tests/resource-sandbox.test.mjs`, `npm run build`, and `git diff --check` passed.
+
+**Findings**
+
+No actionable P0, P1, or P2 issues remain. The generated direction contains more decorative 3D detail than the current product, so the implementation keeps the scene intentionally light and data-focused; labels collapse under semantic zoom while the inspector preserves the complete detail.
+
+final result: passed
