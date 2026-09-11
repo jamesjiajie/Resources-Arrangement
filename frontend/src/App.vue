@@ -10,16 +10,18 @@
       </div>
 
       <nav class="nav-list" :aria-label="t.mainNav">
-        <button
-          v-for="item in navigation"
-          :key="item.id"
-          type="button"
-          :class="{ active: view === item.id }"
-          @click="view = item.id"
-        >
-          <component :is="item.icon" :size="18" />
-          <span>{{ item.label }}</span>
-        </button>
+        <div v-for="item in navigation" :key="item.id" class="nav-item">
+          <button type="button" :class="{ active: view === item.id || (item.id === 'sandbox' && view === 'command') }" @click="view = item.id">
+            <component :is="item.icon" :size="18" />
+            <span>{{ item.label }}</span>
+          </button>
+          <div v-if="item.id === 'sandbox' && (view === 'sandbox' || view === 'command')" class="sandbox-subnav">
+            <button type="button" :class="{ active: view === 'sandbox' }" @click="view = 'sandbox'">关系脉络图</button>
+            <button type="button" :class="{ active: view === 'command' }" @click="view = 'command'">实验性 · 指挥沙盘</button>
+            <button type="button" disabled>容量热力图</button>
+            <button type="button" disabled>冲突分析</button>
+          </div>
+        </div>
       </nav>
 
       <div class="side-summary">
@@ -33,7 +35,7 @@
     </aside>
 
     <main class="main-panel">
-      <header class="topbar">
+      <header v-if="view !== 'command'" class="topbar">
         <div>
           <h1>{{ viewTitle }}</h1>
           <p>{{ viewDescription }}</p>
@@ -62,6 +64,16 @@
       <ResourceSandbox
         v-if="view === 'sandbox'"
         :language="language"
+        :current-date="currentDate"
+        :members="members"
+        :assignments="assignments"
+        :member-load="memberLoad"
+        @update-date="setCommandDate"
+        @refresh="loadData"
+      />
+
+      <CommandSandbox
+        v-if="view === 'command'"
         :current-date="currentDate"
         :members="members"
         :assignments="assignments"
@@ -699,6 +711,7 @@ import BarChart3 from "@lucide/vue/dist/esm/icons/chart-bar.mjs";
 import BriefcaseBusiness from "@lucide/vue/dist/esm/icons/briefcase-business.mjs";
 import CalendarRange from "@lucide/vue/dist/esm/icons/calendar-range.mjs";
 import Check from "@lucide/vue/dist/esm/icons/check.mjs";
+import Crosshair from "@lucide/vue/dist/esm/icons/crosshair.mjs";
 import FileUp from "@lucide/vue/dist/esm/icons/file-up.mjs";
 import FolderKanban from "@lucide/vue/dist/esm/icons/folder-kanban.mjs";
 import FolderPlus from "@lucide/vue/dist/esm/icons/folder-plus.mjs";
@@ -715,6 +728,7 @@ import Trash2 from "@lucide/vue/dist/esm/icons/trash-2.mjs";
 import UserPlus from "@lucide/vue/dist/esm/icons/user-plus.mjs";
 import Users from "@lucide/vue/dist/esm/icons/users.mjs";
 import ResourceSandbox from "./components/ResourceSandbox.vue";
+import CommandSandbox from "./components/CommandSandbox.vue";
 
 const today = new Date().toISOString().slice(0, 10);
 const savedLanguage = window.localStorage.getItem("language");
@@ -761,6 +775,7 @@ const translations = {
     projects: "项目",
     tasks: "任务管理",
     sandbox: "资源沙盘",
+    command: "实验性沙盘",
     imports: "导入",
     dashboardTitle: "资源总览",
     assignmentsTitle: "任务安排",
@@ -769,6 +784,8 @@ const translations = {
     tasksTitle: "长期任务管理",
     sandboxTitle: "关系脉络图",
     sandboxDescription: "一眼看清谁在做什么、谁超负荷、哪里被阻塞。",
+    commandTitle: "资源部署沙盘",
+    commandDescription: "以人员为主节点，观察跨项目任务部署与阻塞路径。",
     memberMetric: "同事",
     activeProjectsMetric: "进行中项目",
     activeAssignmentsMetric: "进行中安排",
@@ -930,6 +947,7 @@ const translations = {
     projects: "Projects",
     tasks: "Tasks",
     sandbox: "Resource Sandbox",
+    command: "Experimental Sandbox",
     imports: "Import",
     dashboardTitle: "Resource Overview",
     assignmentsTitle: "Task Assignments",
@@ -938,6 +956,8 @@ const translations = {
     tasksTitle: "Long-Term Task Management",
     sandboxTitle: "Relationship Map",
     sandboxDescription: "See ownership, workload, and blocked work at a glance.",
+    commandTitle: "Resource Command Sandbox",
+    commandDescription: "Follow people, cross-project deployment paths, and blocked work.",
     memberMetric: "Members",
     activeProjectsMetric: "Active Projects",
     activeAssignmentsMetric: "Active Assignments",
@@ -1127,12 +1147,13 @@ const viewTitle = computed(() => {
     projects: t.value.projectsTitle,
     tasks: t.value.tasksTitle,
     sandbox: t.value.sandboxTitle,
+    command: t.value.commandTitle,
     imports: t.value.excelImportTitle,
   }[view.value];
 });
 
 const viewDescription = computed(() => {
-  return view.value === "sandbox" ? t.value.sandboxDescription : t.value.topbarDescription;
+  return view.value === "sandbox" ? t.value.sandboxDescription : view.value === "command" ? t.value.commandDescription : t.value.topbarDescription;
 });
 
 const metrics = computed(() => [
@@ -1225,6 +1246,11 @@ function defaultTaskForm() {
 function toggleLanguage() {
   language.value = language.value === "zh" ? "en" : "zh";
   window.localStorage.setItem("language", language.value);
+}
+
+function setCommandDate(value) {
+  currentDate.value = value;
+  loadData();
 }
 
 async function request(path, options = {}) {
