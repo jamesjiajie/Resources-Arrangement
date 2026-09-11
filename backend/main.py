@@ -19,10 +19,13 @@ from .services import (
     create_member,
     create_project,
     delete_entity,
+    archive_month,
+    list_archived_assignments,
     list_import_batches,
     list_long_term_tasks,
     update_assignment,
     update_long_term_task,
+    restore_month,
 )
 
 
@@ -57,6 +60,30 @@ def overview(date: Optional[str] = None):
 def imports():
     with get_db() as conn:
         return {"imports": list_import_batches(conn)}
+
+
+@app.get("/api/assignments/archive")
+def archived_assignments():
+    with get_db() as conn:
+        return {"assignments": list_archived_assignments(conn)}
+
+
+@app.post("/api/assignments/archive/{month}")
+def archive_assignments(month: str):
+    try:
+        with get_db() as conn:
+            return {"ok": True, "count": archive_month(conn, month)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/assignments/archive/{month}/restore")
+def restore_archived_assignments(month: str):
+    try:
+        with get_db() as conn:
+            return {"ok": True, "count": restore_month(conn, month)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/api/tasks")

@@ -119,8 +119,7 @@ def read_sheet(content: bytes):
 
 
 def infer_resource_month(filename: str, sheet_name: str) -> str:
-    text = f"{filename} {sheet_name}"
-    year_match = re.search(r"\b(20\d{2})\b", text)
+    year_match = re.search(r"\b(20\d{2})\b", filename) or re.search(r"\b(20\d{2})\b", sheet_name)
     year = int(year_match.group(1)) if year_match else date.today().year
     month_names = {
         "jan": 1,
@@ -148,15 +147,15 @@ def infer_resource_month(filename: str, sheet_name: str) -> str:
         "dec": 12,
         "december": 12,
     }
-    lowered = text.casefold()
-    month = None
-    for name, number in month_names.items():
-        if re.search(rf"\b{name}\b", lowered):
-            month = number
-            break
-    if month is None:
+    def find_month(text: str):
+        lowered = text.casefold()
+        for name, number in month_names.items():
+            if re.search(rf"\b{name}\b", lowered):
+                return number
         numeric = re.search(r"\b(0?[1-9]|1[0-2])\b", text)
-        month = int(numeric.group(1)) if numeric else date.today().month
+        return int(numeric.group(1)) if numeric else None
+
+    month = find_month(filename) or find_month(sheet_name) or date.today().month
     return f"{year:04d}-{month:02d}"
 
 

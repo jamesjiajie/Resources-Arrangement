@@ -134,6 +134,7 @@ def init_db():
         ensure_column(conn, "assignments", "source_key", "TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "assignments", "source_type", "TEXT NOT NULL DEFAULT 'manual'")
         ensure_column(conn, "assignments", "project_pm_item", "TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "assignments", "archived_month", "TEXT")
 
 
 def ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, definition: str):

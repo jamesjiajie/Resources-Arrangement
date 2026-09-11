@@ -1,3 +1,4 @@
+import re
 import sqlite3
 
 from .database import fetch_all, log_activity, now_iso, today_iso
@@ -30,9 +31,11 @@ def list_assignments(conn: sqlite3.Connection):
         FROM assignments a
         JOIN members m ON m.id = a.member_id
         JOIN projects p ON p.id = a.project_id
+        WHERE a.archived_month IS NULL
         ORDER BY
             CASE a.status WHEN 'blocked' THEN 0 WHEN 'active' THEN 1 WHEN 'planned' THEN 2 ELSE 3 END,
-            COALESCE(a.end_date, '9999-12-31'),
+            a.start_date DESC,
+            COALESCE(a.end_date, '9999-12-31') DESC,
             CASE a.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END
         """,
     )
@@ -287,6 +290,46 @@ def create_import_batch(conn: sqlite3.Connection, preview: dict, mode: str, stat
 
 def list_import_batches(conn: sqlite3.Connection):
     return fetch_all(conn, "SELECT * FROM import_batches ORDER BY id DESC LIMIT 30")
+
+
+def list_archived_assignments(conn: sqlite3.Connection):
+    return fetch_all(
+        conn,
+        """
+        SELECT a.*, m.name AS member_name, m.role AS member_role, p.name AS project_name
+        FROM assignments a
+        JOIN members m ON m.id = a.member_id
+        JOIN projects p ON p.id = a.project_id
+        WHERE a.archived_month IS NOT NULL
+        ORDER BY a.archived_month DESC, a.start_date DESC, a.id DESC
+        """,
+    )
+
+
+def archive_month(conn: sqlite3.Connection, month: str):
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise ValueError("月份格式应为 YYYY-MM")
+    cur = conn.execute(
+        """
+        UPDATE assignments
+        SET archived_month = ?, updated_at = ?
+        WHERE source_type = 'excel' AND start_date LIKE ? AND archived_month IS NULL
+        """,
+        (month, now_iso(), f"{month}-%"),
+    )
+    log_activity(conn, "archive", None, "archive", f"存档 {month}：{cur.rowcount} 条 Excel 安排")
+    return cur.rowcount
+
+
+def restore_month(conn: sqlite3.Connection, month: str):
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise ValueError("月份格式应为 YYYY-MM")
+    cur = conn.execute(
+        "UPDATE assignments SET archived_month = NULL, updated_at = ? WHERE archived_month = ?",
+        (now_iso(), month),
+    )
+    log_activity(conn, "archive", None, "restore", f"恢复 {month}：{cur.rowcount} 条安排")
+    return cur.rowcount
 
 
 def list_long_term_tasks(conn: sqlite3.Connection):

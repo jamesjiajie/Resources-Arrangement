@@ -255,6 +255,14 @@ label {
   font-size: 13px;
 }
 
+.optional-date-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+.optional-date-empty, .optional-date-input { display: flex; align-items: center; gap: 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 7px 10px; }
+.optional-date-empty strong { color: var(--ink); font-weight: 500; }
+.optional-date-empty button, .optional-date-input button { margin-left: auto; border: 0; background: transparent; color: var(--primary); font-weight: 700; }
+.optional-date-input input { width: auto; min-width: 0; min-height: 30px; flex: 1; border: 0; padding: 0; }
+.optional-date-input button { flex: none; white-space: nowrap; }
+.optional-date-field small { color: var(--muted); line-height: 1.4; }
+
 .icon-button,
 .square-button,
 .language-toggle {
@@ -305,7 +313,7 @@ label {
 .alert {
   display: flex;
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 18px;
   padding: 12px 14px;
   border: 1px solid #f0b8b8;
@@ -313,6 +321,15 @@ label {
   background: #fff2f2;
   color: var(--red);
 }
+
+.alert-content { display: grid; gap: 5px; min-width: 0; }
+.alert-content > span, .alert-content summary, .alert-content dd { color: #8f2c2c; font-size: 13px; }
+.alert-content summary, .alert-action { cursor: pointer; font-weight: 700; }
+.alert-content dl { display: grid; gap: 5px; margin: 8px 0 0; }
+.alert-content dl div { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 8px; }
+.alert-content dt { font-size: 12px; font-weight: 700; }
+.alert-content dd { margin: 0; overflow-wrap: anywhere; }
+.alert-action { justify-self: start; border: 0; background: transparent; color: var(--red); padding: 2px 0; }
 
 .metric-grid {
   display: grid;
@@ -483,6 +500,96 @@ label {
   gap: 14px;
 }
 
+.member-combobox {
+  position: relative;
+}
+
+.combobox-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 0 10px;
+}
+
+.combobox-control:focus-within {
+  border-color: var(--primary);
+  outline: 3px solid rgba(15, 107, 127, 0.14);
+}
+
+.combobox-control svg {
+  flex: none;
+}
+
+.combobox-control input {
+  min-width: 0;
+  min-height: 38px;
+  border: 0;
+  outline: 0;
+  padding: 0;
+}
+
+.combobox-control button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 3px;
+}
+
+.combobox-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  max-height: 290px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  padding: 5px;
+}
+
+.combobox-menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.combobox-menu button:hover,
+.combobox-menu button.active {
+  background: var(--primary-soft);
+}
+
+.combobox-menu button[aria-selected="true"] {
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
+.combobox-menu mark {
+  background: transparent;
+  color: var(--primary-dark);
+  font-weight: 800;
+}
+
+.combobox-menu p {
+  margin: 0;
+  color: var(--muted);
+  padding: 10px;
+}
+
 .span-2 {
   grid-column: span 2;
 }
@@ -491,6 +598,54 @@ label {
   display: flex;
   gap: 10px;
   margin-top: 16px;
+}
+
+.import-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  padding: 11px 12px;
+}
+
+.import-status div {
+  display: grid;
+  gap: 2px;
+}
+
+.import-status span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.import-status.success {
+  border-color: #a7d8c5;
+  background: #effaf5;
+  color: var(--green);
+}
+
+.import-status.error {
+  border-color: #f0b8b8;
+  background: #fff2f2;
+  color: var(--red);
+}
+
+.import-status.working {
+  border-color: #b9d7df;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .import-layout {
@@ -540,6 +695,67 @@ label {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.archive-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.view-tabs button {
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.view-tabs button.active {
+  background: #fff;
+  color: var(--primary-dark);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 12%);
+  font-weight: 700;
+}
+
+.month-filter {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.month-filter select {
+  min-height: 38px;
+}
+
+.archive-toolbar .icon-button {
+  min-height: 38px;
+  margin-left: auto;
+}
+
+.archive-notice {
+  margin: -4px 0 12px;
+  color: var(--green);
+  font-size: 13px;
+}
+
+.empty-cell {
+  color: var(--muted);
+  text-align: center;
 }
 
 .search-box {
@@ -719,9 +935,14 @@ td span {
   .topbar,
   .top-actions,
   .section-title,
-  .filters {
+  .filters,
+  .archive-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .archive-toolbar .icon-button {
+    margin-left: 0;
   }
 
   .side-panel {

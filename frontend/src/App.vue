@@ -56,9 +56,23 @@
         </div>
       </header>
 
-      <section v-if="error" class="alert">
+      <section v-if="error" class="alert" role="alert">
         <AlertTriangle :size="18" />
-        <span>{{ error }}</span>
+        <div class="alert-content">
+          <strong>{{ error.summary }}</strong>
+          <span>{{ error.hint }}</span>
+          <details>
+            <summary>{{ t.viewErrorDetails }}</summary>
+            <dl>
+              <div><dt>{{ t.errorOperation }}</dt><dd>{{ error.operation }}</dd></div>
+              <div><dt>{{ t.errorRequest }}</dt><dd>{{ error.method }} {{ error.path }}</dd></div>
+              <div><dt>{{ t.errorStatus }}</dt><dd>{{ error.status || t.noResponse }}</dd></div>
+              <div><dt>{{ t.errorTime }}</dt><dd>{{ error.time }}</dd></div>
+              <div><dt>{{ t.errorMessage }}</dt><dd>{{ error.message }}</dd></div>
+            </dl>
+          </details>
+          <button class="alert-action" type="button" @click="copyErrorDetails">{{ errorCopied ? t.errorCopied : t.copyErrorDetails }}</button>
+        </div>
       </section>
 
       <ResourceSandbox
@@ -167,12 +181,43 @@
           </div>
 
           <div class="form-grid">
-            <label>
+            <label class="member-combobox">
               <span>{{ t.member }}</span>
-              <select v-model="assignmentForm.member_id" required>
-                <option value="">{{ t.selectMember }}</option>
-                <option v-for="member in members" :key="member.id" :value="member.id">{{ member.name }}</option>
-              </select>
+              <div class="combobox-control">
+                <Search :size="16" />
+                <input
+                  :value="memberQuery"
+                  role="combobox"
+                  autocomplete="off"
+                  required
+                  :placeholder="t.selectMember"
+                  :aria-expanded="memberMenuOpen"
+                  aria-controls="member-options"
+                  @focus="openMemberMenu"
+                  @input="onMemberInput"
+                  @keydown="onMemberKeydown"
+                  @blur="closeMemberMenu"
+                />
+                <button v-if="memberQuery" type="button" :title="t.clearMember" @mousedown.prevent @click="clearMember">
+                  <X :size="15" />
+                </button>
+              </div>
+              <div v-if="memberMenuOpen" id="member-options" class="combobox-menu" role="listbox">
+                <button
+                  v-for="(member, index) in filteredMembers"
+                  :key="member.id"
+                  type="button"
+                  role="option"
+                  :aria-selected="assignmentForm.member_id === member.id"
+                  :class="{ active: index === highlightedMemberIndex }"
+                  @mousedown.prevent="selectMember(member)"
+                >
+                  <template v-for="(part, partIndex) in memberNameParts(member.name)" :key="partIndex">
+                    <mark v-if="part.match">{{ part.text }}</mark><span v-else>{{ part.text }}</span>
+                  </template>
+                </button>
+                <p v-if="!filteredMembers.length">{{ t.noMemberMatches }}</p>
+              </div>
             </label>
             <label>
               <span>{{ t.project }}</span>
@@ -215,10 +260,18 @@
               <span>{{ t.startDate }}</span>
               <input v-model="assignmentForm.start_date" type="date" required />
             </label>
-            <label>
-              <span>{{ t.endDate }}</span>
-              <input v-model="assignmentForm.end_date" type="date" />
-            </label>
+            <div class="optional-date-field">
+              <span>{{ t.endDateOptional }}</span>
+              <div v-if="!showAssignmentEndDate" class="optional-date-empty">
+                <strong>{{ t.endDateNotSet }}</strong>
+                <button type="button" @click="showAssignmentEndDate = true">{{ t.setDate }}</button>
+              </div>
+              <div v-else class="optional-date-input">
+                <input v-model="assignmentForm.end_date" type="date" :min="assignmentForm.start_date" />
+                <button type="button" @click="clearAssignmentEndDate">{{ t.clearDate }}</button>
+              </div>
+              <small>{{ t.endDateHelp }}</small>
+            </div>
             <label class="span-2">
               <span>{{ t.notes }}</span>
               <textarea v-model.trim="assignmentForm.notes" rows="3"></textarea>
@@ -259,6 +312,29 @@
             </div>
           </div>
 
+          <div class="archive-toolbar">
+            <div class="view-tabs" role="tablist" :aria-label="t.assignmentList">
+              <button type="button" :class="{ active: assignmentView === 'current' }" @click="assignmentView = 'current'">{{ t.currentAssignments }}</button>
+              <button type="button" :class="{ active: assignmentView === 'archived' }" @click="assignmentView = 'archived'">{{ t.archivedAssignments }}</button>
+            </div>
+            <label class="month-filter">
+              <span>{{ t.month }}</span>
+              <select v-model="selectedMonth">
+                <option value="">{{ t.allMonths }}</option>
+                <option v-for="month in availableMonths" :key="month" :value="month">{{ monthLabel(month) }}</option>
+              </select>
+            </label>
+            <button v-if="assignmentView === 'current' && selectedMonth" class="icon-button" type="button" @click="archiveSelectedMonth">
+              <Archive :size="18" />
+              <span>{{ t.archiveMonth }}</span>
+            </button>
+            <button v-else-if="assignmentView === 'archived' && selectedMonth && availableMonths.includes(selectedMonth)" class="icon-button primary" type="button" @click="restoreSelectedMonth">
+              <RotateCcw :size="18" />
+              <span>{{ t.restoreMonth }}</span>
+            </button>
+          </div>
+          <p v-if="archiveNotice" class="archive-notice" role="status">{{ archiveNotice }}</p>
+
           <div class="table-wrap">
             <table>
               <thead>
@@ -286,7 +362,7 @@
                   <td><span class="status-pill" :class="item.status">{{ statusLabel(item.status) }}</span></td>
                   <td>{{ item.start_date }} - {{ item.end_date || t.ongoing }}</td>
                   <td>
-                    <div class="row-actions">
+                    <div v-if="assignmentView === 'current'" class="row-actions">
                       <button class="square-button" type="button" :title="t.edit" @click="editAssignment(item)">
                         <Pencil :size="17" />
                       </button>
@@ -294,7 +370,11 @@
                         <Trash2 :size="17" />
                       </button>
                     </div>
+                    <span v-else>{{ t.readOnly }}</span>
                   </td>
+                </tr>
+                <tr v-if="!filteredAssignments.length">
+                  <td colspan="8" class="empty-cell">{{ t.noAssignmentsForMonth }}</td>
                 </tr>
               </tbody>
             </table>
@@ -620,6 +700,17 @@
               <span>{{ t.applyImport }}</span>
             </button>
           </div>
+
+          <div class="import-status" :class="displayedImportStatus.type" :role="displayedImportStatus.type === 'error' ? 'alert' : 'status'">
+            <LoaderCircle v-if="displayedImportStatus.type === 'working'" :size="18" class="spin" />
+            <Check v-else-if="displayedImportStatus.type === 'success'" :size="18" />
+            <AlertTriangle v-else-if="displayedImportStatus.type === 'error'" :size="18" />
+            <FileUp v-else :size="18" />
+            <div>
+              <strong>{{ displayedImportStatus.title }}</strong>
+              <span v-if="displayedImportStatus.detail">{{ displayedImportStatus.detail }}</span>
+            </div>
+          </div>
         </section>
 
         <section v-if="importPreview" class="section-block">
@@ -707,6 +798,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
 import AlertTriangle from "@lucide/vue/dist/esm/icons/triangle-alert.mjs";
+import Archive from "@lucide/vue/dist/esm/icons/archive.mjs";
 import BarChart3 from "@lucide/vue/dist/esm/icons/chart-bar.mjs";
 import BriefcaseBusiness from "@lucide/vue/dist/esm/icons/briefcase-business.mjs";
 import CalendarRange from "@lucide/vue/dist/esm/icons/calendar-range.mjs";
@@ -718,6 +810,7 @@ import FolderPlus from "@lucide/vue/dist/esm/icons/folder-plus.mjs";
 import Gauge from "@lucide/vue/dist/esm/icons/gauge.mjs";
 import Languages from "@lucide/vue/dist/esm/icons/languages.mjs";
 import ListChecks from "@lucide/vue/dist/esm/icons/list-checks.mjs";
+import LoaderCircle from "@lucide/vue/dist/esm/icons/loader-circle.mjs";
 import Network from "@lucide/vue/dist/esm/icons/network.mjs";
 import Pencil from "@lucide/vue/dist/esm/icons/pencil.mjs";
 import RefreshCw from "@lucide/vue/dist/esm/icons/refresh-cw.mjs";
@@ -727,6 +820,7 @@ import Search from "@lucide/vue/dist/esm/icons/search.mjs";
 import Trash2 from "@lucide/vue/dist/esm/icons/trash-2.mjs";
 import UserPlus from "@lucide/vue/dist/esm/icons/user-plus.mjs";
 import Users from "@lucide/vue/dist/esm/icons/users.mjs";
+import X from "@lucide/vue/dist/esm/icons/x.mjs";
 import ResourceSandbox from "./components/ResourceSandbox.vue";
 import CommandSandbox from "./components/CommandSandbox.vue";
 
@@ -735,7 +829,12 @@ const savedLanguage = window.localStorage.getItem("language");
 const language = ref(savedLanguage === "en" ? "en" : "zh");
 const view = ref("dashboard");
 const currentDate = ref(today);
-const error = ref("");
+const error = ref(null);
+const errorCopied = ref(false);
+const showAssignmentEndDate = ref(false);
+const memberQuery = ref("");
+const memberMenuOpen = ref(false);
+const highlightedMemberIndex = ref(0);
 const search = ref("");
 const statusFilter = ref("");
 const taskSearch = ref("");
@@ -747,6 +846,11 @@ const importPreview = ref(null);
 const importMode = ref("replace_month");
 const importResult = ref(null);
 const importing = ref(false);
+const importStatus = ref(null);
+const assignmentView = ref("current");
+const selectedMonth = ref(today.slice(0, 7));
+const archivedAssignments = ref([]);
+const archiveNotice = ref("");
 
 const stats = ref({});
 const members = ref([]);
@@ -808,6 +912,9 @@ const translations = {
     member: "同事",
     project: "项目",
     selectMember: "选择同事",
+    clearMember: "清除已选同事",
+    noMemberMatches: "未找到匹配同事",
+    chooseMemberFromList: "请从列表中选择同事",
     selectProject: "选择项目",
     taskName: "任务/职责",
     taskPlaceholder: "例如：支付模块接口联调",
@@ -827,6 +934,38 @@ const translations = {
     archived: "已归档",
     startDate: "开始日期",
     endDate: "结束日期",
+    endDateOptional: "结束日期（选填）",
+    setDate: "设置日期",
+    clearDate: "清除",
+    endDateHelp: "留空表示暂无结束日期，可稍后补充。",
+    endDateNotSet: "未设置",
+    errorFormPreserved: "已保留填写内容，请检查后重试。",
+    errorDataMayBeStale: "页面数据可能未更新，请检查详情后重试刷新。",
+    viewErrorDetails: "查看详情",
+    copyErrorDetails: "复制错误信息",
+    errorCopied: "已复制",
+    errorOperation: "失败操作",
+    errorRequest: "请求",
+    errorStatus: "状态",
+    errorTime: "发生时间",
+    errorMessage: "错误信息",
+    noResponse: "未收到服务器响应",
+    loadDataOperation: "加载数据",
+    saveAssignmentOperation: "新增安排",
+    updateAssignmentOperation: "更新安排",
+    importOperation: "导入数据",
+    parsingImport: "正在解析文件",
+    parsingImportDetail: "正在读取工作表并检查数据，请稍候。",
+    previewReady: "解析成功，可以确认导入",
+    previewReadyDetail: "请检查预览内容和问题列表，再确认导入。",
+    applyingImport: "正在导入数据",
+    applyingImportDetail: "正在写入同事、项目和安排，请勿关闭页面。",
+    importSucceeded: "导入成功",
+    importFailed: "导入失败",
+    waitingForFile: "等待选择 Excel 文件",
+    waitingForFileDetail: "选择文件后可先解析预览，不会立即写入数据。",
+    fileReady: "文件已选择，可以解析预览",
+    operationFailed: "失败",
     targetDate: "目标日期",
     progress: "进度",
     notes: "备注",
@@ -834,6 +973,20 @@ const translations = {
     clear: "清空",
     assignmentList: "安排列表",
     assignmentListDescription: "搜索同事、项目、项目 PM 或任务，快速定位安排。",
+    currentAssignments: "当前安排",
+    archivedAssignments: "已存档",
+    month: "月份",
+    allMonths: "全部月份",
+    archiveMonth: "存档本月",
+    restoreMonth: "恢复本月",
+    archiveConfirm: "将存档该月的 Excel 安排：",
+    restoreConfirm: "将恢复该月存档：",
+    archivedCount: "已存档安排",
+    restoredCount: "已恢复安排",
+    archiveOperation: "存档月份",
+    restoreOperation: "恢复月份",
+    readOnly: "只读",
+    noAssignmentsForMonth: "该月份没有安排。",
     searchPlaceholder: "搜索同事、项目、项目 PM、任务",
     allStatuses: "全部状态",
     task: "任务",
@@ -980,6 +1133,9 @@ const translations = {
     member: "Member",
     project: "Project",
     selectMember: "Select member",
+    clearMember: "Clear selected member",
+    noMemberMatches: "No matching members",
+    chooseMemberFromList: "Select a member from the list",
     selectProject: "Select project",
     taskName: "Task / Responsibility",
     taskPlaceholder: "Example: Payment API integration",
@@ -999,6 +1155,38 @@ const translations = {
     archived: "Archived",
     startDate: "Start date",
     endDate: "End date",
+    endDateOptional: "End date (optional)",
+    setDate: "Set date",
+    clearDate: "Clear",
+    endDateHelp: "Leave blank when there is no end date yet. You can add one later.",
+    endDateNotSet: "Not set",
+    errorFormPreserved: "Your entries are preserved. Check the details and try again.",
+    errorDataMayBeStale: "Page data may be out of date. Check the details and refresh again.",
+    viewErrorDetails: "View details",
+    copyErrorDetails: "Copy error details",
+    errorCopied: "Copied",
+    errorOperation: "Operation",
+    errorRequest: "Request",
+    errorStatus: "Status",
+    errorTime: "Time",
+    errorMessage: "Error",
+    noResponse: "No response from server",
+    loadDataOperation: "Load data",
+    saveAssignmentOperation: "Create assignment",
+    updateAssignmentOperation: "Update assignment",
+    importOperation: "Import data",
+    parsingImport: "Parsing file",
+    parsingImportDetail: "Reading the worksheet and checking the data.",
+    previewReady: "Preview ready",
+    previewReadyDetail: "Review the preview and issues before confirming the import.",
+    applyingImport: "Importing data",
+    applyingImportDetail: "Writing members, projects, and assignments. Keep this page open.",
+    importSucceeded: "Import complete",
+    importFailed: "Import failed",
+    waitingForFile: "Waiting for an Excel file",
+    waitingForFileDetail: "Select a file to preview it before any data is written.",
+    fileReady: "File selected and ready to preview",
+    operationFailed: "failed",
     targetDate: "Target date",
     progress: "Progress",
     notes: "Notes",
@@ -1006,6 +1194,20 @@ const translations = {
     clear: "Clear",
     assignmentList: "Assignment List",
     assignmentListDescription: "Search members, projects, project PMs, or tasks to find assignments quickly.",
+    currentAssignments: "Current Assignments",
+    archivedAssignments: "Archived",
+    month: "Month",
+    allMonths: "All months",
+    archiveMonth: "Archive month",
+    restoreMonth: "Restore month",
+    archiveConfirm: "Archive Excel assignments for",
+    restoreConfirm: "Restore archived assignments for",
+    archivedCount: "archived assignments",
+    restoredCount: "restored assignments",
+    archiveOperation: "Archive month",
+    restoreOperation: "Restore month",
+    readOnly: "Read-only",
+    noAssignmentsForMonth: "No assignments for this month.",
     searchPlaceholder: "Search member, project, project PM, task",
     allStatuses: "All statuses",
     task: "Task",
@@ -1105,6 +1307,11 @@ const translations = {
 };
 
 const t = computed(() => translations[language.value]);
+const displayedImportStatus = computed(() => importStatus.value || {
+  type: "idle",
+  title: t.value.waitingForFile,
+  detail: t.value.waitingForFileDetail,
+});
 
 const navigation = computed(() => [
   { id: "dashboard", label: t.value.dashboard, icon: Gauge },
@@ -1177,10 +1384,19 @@ const sortedLoads = computed(() => {
 
 const filteredAssignments = computed(() => {
   const needle = search.value.toLowerCase();
-  return assignments.value.filter((item) => {
+  const source = assignmentView.value === "archived" ? archivedAssignments.value : assignments.value;
+  return source.filter((item) => {
     const text = `${item.member_name} ${item.project_name} ${item.project_pm_item || ""} ${item.task_name}`.toLowerCase();
-    return (!needle || text.includes(needle)) && (!statusFilter.value || item.status === statusFilter.value);
+    const itemMonth = assignmentView.value === "archived" ? item.archived_month : item.start_date.slice(0, 7);
+    return (!needle || text.includes(needle))
+      && (!statusFilter.value || item.status === statusFilter.value)
+      && (!selectedMonth.value || itemMonth === selectedMonth.value);
   });
+});
+
+const availableMonths = computed(() => {
+  const source = assignmentView.value === "archived" ? archivedAssignments.value : assignments.value;
+  return [...new Set(source.map((item) => assignmentView.value === "archived" ? item.archived_month : item.start_date.slice(0, 7)).filter(Boolean))].sort().reverse();
 });
 
 const filteredLongTermTasks = computed(() => {
@@ -1213,6 +1429,78 @@ const taskMetrics = computed(() => {
 const previewAssignments = computed(() => {
   return importPreview.value ? importPreview.value.assignments.slice(0, 20) : [];
 });
+
+const filteredMembers = computed(() => {
+  const needle = normalizeMemberName(memberQuery.value);
+  const selectedName = members.value.find((member) => member.id === assignmentForm.member_id)?.name || "";
+  const search = memberQuery.value === selectedName ? "" : needle;
+  return members.value.filter((member) => !search || normalizeMemberName(member.name).includes(search)).slice(0, 8);
+});
+
+function normalizeMemberName(value) {
+  return String(value || "").toLowerCase().replace(/[\s,]+/g, "");
+}
+
+function memberNameParts(name) {
+  const needle = memberQuery.value.trim().toLowerCase();
+  const index = name.toLowerCase().indexOf(needle);
+  if (!needle || index < 0) return [{ text: name, match: false }];
+  return [
+    { text: name.slice(0, index), match: false },
+    { text: name.slice(index, index + needle.length), match: true },
+    { text: name.slice(index + needle.length), match: false },
+  ].filter((part) => part.text);
+}
+
+function openMemberMenu(event) {
+  memberMenuOpen.value = true;
+  highlightedMemberIndex.value = 0;
+  event.target.select();
+}
+
+function onMemberInput(event) {
+  memberQuery.value = event.target.value;
+  assignmentForm.member_id = "";
+  memberMenuOpen.value = true;
+  highlightedMemberIndex.value = 0;
+  event.target.setCustomValidity(t.value.chooseMemberFromList);
+}
+
+function selectMember(member) {
+  assignmentForm.member_id = member.id;
+  memberQuery.value = member.name;
+  memberMenuOpen.value = false;
+  document.querySelector(".member-combobox input")?.setCustomValidity("");
+}
+
+function clearMember() {
+  assignmentForm.member_id = "";
+  memberQuery.value = "";
+  memberMenuOpen.value = true;
+  document.querySelector(".member-combobox input")?.focus();
+}
+
+function closeMemberMenu() {
+  window.setTimeout(() => {
+    memberMenuOpen.value = false;
+    if (!assignmentForm.member_id) memberQuery.value = "";
+  }, 100);
+}
+
+function onMemberKeydown(event) {
+  if (event.key === "Escape") {
+    memberMenuOpen.value = false;
+    return;
+  }
+  if (!["ArrowDown", "ArrowUp", "Enter"].includes(event.key) || !memberMenuOpen.value || !filteredMembers.value.length) return;
+  event.preventDefault();
+  if (event.key === "Enter" && filteredMembers.value[highlightedMemberIndex.value]) {
+    selectMember(filteredMembers.value[highlightedMemberIndex.value]);
+    return;
+  }
+  const direction = event.key === "ArrowDown" ? 1 : -1;
+  highlightedMemberIndex.value = (highlightedMemberIndex.value + direction + filteredMembers.value.length) % filteredMembers.value.length;
+}
 
 function defaultAssignmentForm() {
   return {
@@ -1253,43 +1541,83 @@ function setCommandDate(value) {
   loadData();
 }
 
-async function request(path, options = {}) {
-  error.value = "";
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body.detail || body.error || t.value.requestFailed);
+function errorMessage(detail) {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return detail.map((item) => `${item.loc?.slice(1).join(".") || "field"}: ${item.msg}`).join("; ");
+  return detail ? JSON.stringify(detail) : t.value.requestFailed;
+}
+
+async function request(path, options = {}, operation = "") {
+  error.value = null;
+  errorCopied.value = false;
+  const method = options.method || "GET";
+  try {
+    const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const requestError = new Error(errorMessage(body.detail || body.error));
+      Object.assign(requestError, { method, path, status: `${response.status} ${response.statusText}`.trim(), operation });
+      throw requestError;
+    }
+    return body;
+  } catch (err) {
+    Object.assign(err, { method: err.method || method, path: err.path || path, operation: err.operation || operation });
+    throw err;
   }
-  return body;
+}
+
+function showError(err, fallbackOperation = "") {
+  const operation = err.operation || fallbackOperation || t.value.requestFailed;
+  error.value = {
+    summary: `${operation}${language.value === "zh" ? "" : " "}${t.value.operationFailed}: ${err.message}`,
+    operation,
+    method: err.method || "—",
+    path: err.path || "—",
+    status: err.status || "",
+    time: new Date().toLocaleString(language.value === "zh" ? "zh-CN" : "en-US"),
+    message: err.message,
+    hint: err.method === "GET" ? t.value.errorDataMayBeStale : t.value.errorFormPreserved,
+  };
+}
+
+async function copyErrorDetails() {
+  if (!error.value) return;
+  const value = error.value;
+  const text = `${value.summary}\n${value.operation}\n${value.method} ${value.path}\n${value.status || t.value.noResponse}\n${value.time}\n${value.message}`;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+  }
+  errorCopied.value = true;
 }
 
 async function uploadExcel(path) {
   if (!importFile.value) {
     throw new Error(t.value.excelFile);
   }
-  error.value = "";
-  const response = await fetch(path, {
+  return request(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "X-Filename": encodeURIComponent(importFile.value.name),
     },
     body: await importFile.value.arrayBuffer(),
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body.detail || body.error || t.value.requestFailed);
-  }
-  return body;
+  }, t.value.importOperation);
 }
 
 async function loadData() {
   try {
-    const data = await request(`/api/overview?date=${currentDate.value}`);
-    const taskData = await request("/api/tasks");
+    const [data, taskData, archiveData] = await Promise.all([
+      request(`/api/overview?date=${currentDate.value}`, {}, t.value.loadDataOperation),
+      request("/api/tasks", {}, t.value.loadDataOperation),
+      request("/api/assignments/archive", {}, t.value.loadDataOperation),
+    ]);
     stats.value = data.stats;
     members.value = data.members;
     projects.value = data.projects;
@@ -1298,8 +1626,9 @@ async function loadData() {
     memberLoad.value = data.member_load;
     projectLoad.value = data.project_load;
     activity.value = data.activity;
+    archivedAssignments.value = archiveData.assignments;
   } catch (err) {
-    error.value = err.message;
+    showError(err, t.value.loadDataOperation);
   }
 }
 
@@ -1307,15 +1636,19 @@ function handleImportFile(event) {
   importFile.value = event.target.files?.[0] || null;
   importPreview.value = null;
   importResult.value = null;
+  importStatus.value = importFile.value ? { type: "idle", title: t.value.fileReady, detail: importFile.value.name } : null;
 }
 
 async function previewImport() {
   try {
     importing.value = true;
     importResult.value = null;
+    importStatus.value = { type: "working", title: t.value.parsingImport, detail: t.value.parsingImportDetail };
     importPreview.value = await uploadExcel("/api/imports/excel/preview");
+    importStatus.value = { type: "success", title: t.value.previewReady, detail: t.value.previewReadyDetail };
   } catch (err) {
-    error.value = err.message;
+    importStatus.value = { type: "error", title: t.value.importFailed, detail: err.message };
+    showError(err, t.value.importOperation);
   } finally {
     importing.value = false;
   }
@@ -1327,13 +1660,50 @@ async function applyImport() {
   }
   try {
     importing.value = true;
+    importStatus.value = { type: "working", title: t.value.applyingImport, detail: t.value.applyingImportDetail };
     const data = await uploadExcel(`/api/imports/excel/apply?mode=${importMode.value}`);
     importResult.value = data.result;
+    selectedMonth.value = importPreview.value.resource_month;
+    assignmentView.value = "current";
+    importStatus.value = {
+      type: "success",
+      title: t.value.importSucceeded,
+      detail: `${t.value.importCreatedAssignments} ${data.result.created_assignments} · ${t.value.importCreatedMembers} ${data.result.created_members} · ${t.value.importCreatedProjects} ${data.result.created_projects}`,
+    };
     await loadData();
   } catch (err) {
-    error.value = err.message;
+    importStatus.value = { type: "error", title: t.value.importFailed, detail: err.message };
+    showError(err, t.value.importOperation);
   } finally {
     importing.value = false;
+  }
+}
+
+function monthLabel(month) {
+  const [year, value] = month.split("-");
+  return language.value === "zh" ? `${year}年${Number(value)}月` : `${year}-${value}`;
+}
+
+async function archiveSelectedMonth() {
+  if (!window.confirm(`${t.value.archiveConfirm} ${monthLabel(selectedMonth.value)}？`)) return;
+  try {
+    const data = await request(`/api/assignments/archive/${selectedMonth.value}`, { method: "POST" }, t.value.archiveOperation);
+    archiveNotice.value = `${monthLabel(selectedMonth.value)}：${t.value.archivedCount} ${data.count}`;
+    await loadData();
+  } catch (err) {
+    showError(err, t.value.archiveOperation);
+  }
+}
+
+async function restoreSelectedMonth() {
+  if (!window.confirm(`${t.value.restoreConfirm} ${monthLabel(selectedMonth.value)}？`)) return;
+  try {
+    const data = await request(`/api/assignments/archive/${selectedMonth.value}/restore`, { method: "POST" }, t.value.restoreOperation);
+    archiveNotice.value = `${monthLabel(selectedMonth.value)}：${t.value.restoredCount} ${data.count}`;
+    assignmentView.value = "current";
+    await loadData();
+  } catch (err) {
+    showError(err, t.value.restoreOperation);
   }
 }
 
@@ -1343,7 +1713,7 @@ async function createMember() {
     Object.assign(memberForm, { name: "", role: "", team: "", capacity_hours_week: 40, status: "available", notes: "" });
     await loadData();
   } catch (err) {
-    error.value = err.message;
+    showError(err);
   }
 }
 
@@ -1362,7 +1732,7 @@ async function createProject() {
     });
     await loadData();
   } catch (err) {
-    error.value = err.message;
+    showError(err);
   }
 }
 
@@ -1372,11 +1742,11 @@ async function saveAssignment() {
     await request(path, {
       method: editingAssignmentId.value ? "PUT" : "POST",
       body: JSON.stringify(assignmentForm),
-    });
+    }, editingAssignmentId.value ? t.value.updateAssignmentOperation : t.value.saveAssignmentOperation);
     resetAssignmentForm();
     await loadData();
   } catch (err) {
-    error.value = err.message;
+    showError(err, editingAssignmentId.value ? t.value.updateAssignmentOperation : t.value.saveAssignmentOperation);
   }
 }
 
@@ -1390,7 +1760,7 @@ async function saveLongTermTask() {
     resetTaskForm();
     await loadData();
   } catch (err) {
-    error.value = err.message;
+    showError(err);
   }
 }
 
@@ -1408,12 +1778,21 @@ function editAssignment(item) {
     priority: item.priority,
     notes: item.notes || "",
   });
+  memberQuery.value = members.value.find((member) => member.id === item.member_id)?.name || "";
+  showAssignmentEndDate.value = Boolean(item.end_date);
   view.value = "assignments";
 }
 
 function resetAssignmentForm() {
   editingAssignmentId.value = null;
+  showAssignmentEndDate.value = false;
+  memberQuery.value = "";
   Object.assign(assignmentForm, defaultAssignmentForm());
+}
+
+function clearAssignmentEndDate() {
+  assignmentForm.end_date = "";
+  showAssignmentEndDate.value = false;
 }
 
 function editLongTermTask(item) {
@@ -1445,7 +1824,7 @@ async function completeLongTermTask(item) {
     });
     await loadData();
   } catch (err) {
-    error.value = err.message;
+    showError(err);
   }
 }
 
@@ -1457,7 +1836,7 @@ async function removeLongTermTask(id) {
     await request(`/api/tasks/${id}`, { method: "DELETE" });
     await loadData();
   } catch (err) {
-    error.value = err.message;
+    showError(err);
   }
 }
 
@@ -1469,7 +1848,7 @@ async function removeItem(type, id) {
     await request(`/api/${type}/${id}`, { method: "DELETE" });
     await loadData();
   } catch (err) {
-    error.value = err.message;
+    showError(err);
   }
 }
 

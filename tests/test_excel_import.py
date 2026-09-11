@@ -2,10 +2,11 @@ import io
 import sqlite3
 import unittest
 import zipfile
+from datetime import date
 from xml.sax.saxutils import escape
 
 from backend.excel_import import parse_resource_workbook
-from backend.services import apply_excel_import
+from backend.services import apply_excel_import, archive_month, restore_month
 
 
 WORKBOOK_XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -87,6 +88,15 @@ class ParseResourceWorkbookTests(unittest.TestCase):
         self.assertEqual(assignment["task_name"], "Implementation task")
         self.assertEqual(assignment["allocation_percent"], 75)
 
+    def test_filename_month_takes_priority_over_stale_sheet_name(self):
+        preview = parse_resource_workbook(
+            build_workbook(), "Project Resources Summary - Sep 26.xlsx"
+        )
+
+        self.assertTrue(preview["resource_month"].endswith("-09"))
+        self.assertEqual(preview["start_date"], f"{date.today().year}-09-01")
+        self.assertEqual(preview["end_date"], f"{date.today().year}-09-30")
+
 
 class ApplyExcelImportTests(unittest.TestCase):
     def test_rejects_empty_assignments_before_replacing_month(self):
@@ -111,6 +121,37 @@ class ApplyExcelImportTests(unittest.TestCase):
 
         remaining = conn.execute("SELECT COUNT(*) FROM assignments").fetchone()[0]
         self.assertEqual(remaining, 1)
+
+    def test_archive_and_restore_only_month_excel_assignments(self):
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(
+            """
+            CREATE TABLE assignments (
+                id INTEGER PRIMARY KEY,
+                source_type TEXT,
+                start_date TEXT,
+                archived_month TEXT,
+                updated_at TEXT
+            );
+            CREATE TABLE activity_log (
+                id INTEGER PRIMARY KEY,
+                entity_type TEXT,
+                entity_id INTEGER,
+                action TEXT,
+                summary TEXT,
+                created_at TEXT
+            );
+            INSERT INTO assignments VALUES (1, 'excel', '2026-09-01', NULL, '');
+            INSERT INTO assignments VALUES (2, 'manual', '2026-09-01', NULL, '');
+            INSERT INTO assignments VALUES (3, 'excel', '2026-08-01', NULL, '');
+            """
+        )
+
+        self.assertEqual(archive_month(conn, "2026-09"), 1)
+        self.assertEqual(conn.execute("SELECT archived_month FROM assignments WHERE id = 1").fetchone()[0], "2026-09")
+        self.assertIsNone(conn.execute("SELECT archived_month FROM assignments WHERE id = 2").fetchone()[0])
+        self.assertEqual(restore_month(conn, "2026-09"), 1)
+        self.assertIsNone(conn.execute("SELECT archived_month FROM assignments WHERE id = 1").fetchone()[0])
 
 
 if __name__ == "__main__":
