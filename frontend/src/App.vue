@@ -1,6 +1,6 @@
 <template>
   <div class="app-shell">
-    <aside class="side-panel">
+    <aside class="side-panel" :inert="Boolean(selectedTask)">
       <div class="brand">
         <div class="brand-mark">RA</div>
         <div>
@@ -34,7 +34,7 @@
       </div>
     </aside>
 
-    <main class="main-panel">
+    <main class="main-panel" :inert="Boolean(selectedTask)">
       <header v-if="view !== 'command'" class="topbar">
         <div>
           <h1>{{ viewTitle }}</h1>
@@ -526,7 +526,7 @@
           </article>
         </div>
 
-        <form class="form-panel" @submit.prevent="saveLongTermTask">
+        <form v-if="!editingTaskId" class="form-panel" @submit.prevent="saveLongTermTask">
           <div class="section-title compact">
             <div>
               <h2>{{ editingTaskId ? t.editLongTermTask : t.newLongTermTask }}</h2>
@@ -629,10 +629,20 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in filteredLongTermTasks" :key="item.id">
+                <tr
+                  v-for="item in filteredLongTermTasks"
+                  :key="item.id"
+                  class="task-row"
+                  :class="{ selected: selectedTaskId === item.id }"
+                  tabindex="0"
+                  :aria-label="`${t.viewDetails}: ${item.title}`"
+                  @click="openTaskDetails(item)"
+                  @keydown.enter="openTaskDetails(item)"
+                >
                   <td>
-                    <strong>{{ item.title }}</strong>
+                    <button class="task-title-button" type="button" @click.stop="openTaskDetails(item)">{{ item.title }}</button>
                     <span>{{ item.category || t.noCategory }}</span>
+                    <small v-if="item.notes" class="task-note-preview">{{ item.notes }}</small>
                   </td>
                   <td>{{ item.owner || t.noOwner }}</td>
                   <td><span class="status-pill" :class="item.status">{{ statusLabel(item.status) }}</span></td>
@@ -648,13 +658,14 @@
                   <td>{{ item.start_date || t.notSet }} - {{ item.target_date || t.ongoing }}</td>
                   <td>
                     <div class="row-actions">
-                      <button class="square-button" type="button" :title="t.edit" @click="editLongTermTask(item)">
+                      <button class="view-task-button" type="button" @click.stop="openTaskDetails(item)">{{ t.viewDetails }}</button>
+                      <button class="square-button" type="button" :title="t.edit" @click.stop="editLongTermTask(item)">
                         <Pencil :size="17" />
                       </button>
-                      <button class="square-button" type="button" :title="t.markDone" @click="completeLongTermTask(item)">
+                      <button class="square-button" type="button" :title="t.markDone" @click.stop="completeLongTermTask(item)">
                         <Check :size="17" />
                       </button>
-                      <button class="square-button danger" type="button" :title="t.delete" @click="removeLongTermTask(item.id)">
+                      <button class="square-button danger" type="button" :title="t.delete" @click.stop="removeLongTermTask(item.id)">
                         <Trash2 :size="17" />
                       </button>
                     </div>
@@ -792,6 +803,71 @@
         </section>
       </section>
     </main>
+
+    <div v-if="selectedTask" class="task-drawer-layer" @click.self="closeTaskDetails" @keyup.esc="closeTaskDetails">
+      <aside class="task-drawer" role="dialog" aria-modal="true" :aria-labelledby="`task-detail-${selectedTask.id}`" tabindex="-1" autofocus>
+        <header class="task-drawer-header">
+          <div>
+            <span>{{ editingTaskId ? t.editLongTermTask : t.taskDetails }}</span>
+            <h2 :id="`task-detail-${selectedTask.id}`">{{ selectedTask.title }}</h2>
+          </div>
+          <button class="square-button" type="button" :aria-label="t.close" @click="closeTaskDetails"><X :size="19" /></button>
+        </header>
+
+        <form v-if="editingTaskId === selectedTask.id" class="task-drawer-body task-edit-form" @submit.prevent="saveLongTermTask">
+          <label>
+            <span>{{ t.taskTitle }}</span>
+            <input v-model.trim="taskForm.title" required />
+          </label>
+          <div class="task-detail-grid">
+            <label><span>{{ t.owner }}</span><input v-model.trim="taskForm.owner" /></label>
+            <label><span>{{ t.category }}</span><input v-model.trim="taskForm.category" /></label>
+            <label><span>{{ t.status }}</span><select v-model="taskForm.status"><option value="planned">{{ t.planned }}</option><option value="active">{{ t.active }}</option><option value="blocked">{{ t.blocked }}</option><option value="done">{{ t.done }}</option><option value="archived">{{ t.archived }}</option></select></label>
+            <label><span>{{ t.priority }}</span><select v-model="taskForm.priority"><option value="high">{{ t.high }}</option><option value="medium">{{ t.medium }}</option><option value="low">{{ t.low }}</option></select></label>
+            <label><span>{{ t.progress }}</span><input v-model.number="taskForm.progress" type="number" min="0" max="100" /></label>
+            <label><span>{{ t.startDate }}</span><input v-model="taskForm.start_date" type="date" /></label>
+            <label><span>{{ t.targetDate }}</span><input v-model="taskForm.target_date" type="date" /></label>
+          </div>
+          <label><span>{{ t.notes }}</span><textarea v-model.trim="taskForm.notes" rows="8"></textarea></label>
+          <div class="task-drawer-actions">
+            <button class="icon-button" type="button" @click="cancelTaskEdit">{{ t.cancel }}</button>
+            <button class="icon-button primary" type="submit"><Save :size="17" />{{ t.saveChanges }}</button>
+          </div>
+        </form>
+
+        <div v-else class="task-drawer-body">
+          <div class="task-badges">
+            <span class="status-pill" :class="selectedTask.status">{{ statusLabel(selectedTask.status) }}</span>
+            <span class="priority-pill" :class="selectedTask.priority">{{ priorityLabel(selectedTask.priority) }}</span>
+          </div>
+          <dl class="task-detail-grid">
+            <div><dt>{{ t.owner }}</dt><dd>{{ selectedTask.owner || t.noOwner }}</dd></div>
+            <div><dt>{{ t.category }}</dt><dd>{{ selectedTask.category || t.noCategory }}</dd></div>
+            <div><dt>{{ t.startDate }}</dt><dd>{{ selectedTask.start_date || t.notSet }}</dd></div>
+            <div><dt>{{ t.targetDate }}</dt><dd>{{ selectedTask.target_date || t.ongoing }}</dd></div>
+          </dl>
+          <section class="task-detail-section">
+            <div class="task-progress-heading"><h3>{{ t.progress }}</h3><strong>{{ selectedTask.progress }}%</strong></div>
+            <div class="capacity-bar"><i :style="{ width: bounded(selectedTask.progress) + '%' }"></i></div>
+          </section>
+          <section class="task-detail-section">
+            <h3>{{ t.notes }}</h3>
+            <p class="task-full-notes" :class="{ empty: !selectedTask.notes }">{{ selectedTask.notes || t.noNotes }}</p>
+          </section>
+        </div>
+
+        <footer v-if="editingTaskId !== selectedTask.id" class="task-drawer-footer">
+          <div class="task-step-actions">
+            <button class="icon-button" type="button" :disabled="selectedTaskIndex <= 0" @click="stepTask(-1)">{{ t.previous }}</button>
+            <button class="icon-button" type="button" :disabled="selectedTaskIndex >= filteredLongTermTasks.length - 1" @click="stepTask(1)">{{ t.next }}</button>
+          </div>
+          <div class="task-primary-actions">
+            <button v-if="selectedTask.status !== 'done'" class="icon-button" type="button" @click="completeLongTermTask(selectedTask)"><Check :size="17" />{{ t.markDone }}</button>
+            <button class="icon-button primary" type="button" @click="startTaskEdit(selectedTask)"><Pencil :size="17" />{{ t.edit }}</button>
+          </div>
+        </footer>
+      </aside>
+    </div>
   </div>
 </template>
 
@@ -839,8 +915,10 @@ const search = ref("");
 const statusFilter = ref("");
 const taskSearch = ref("");
 const taskStatusFilter = ref("");
+const selectedTaskId = ref(null);
 const editingAssignmentId = ref(null);
 const editingTaskId = ref(null);
+const taskEditSnapshot = ref("");
 const importFile = ref(null);
 const importPreview = ref(null);
 const importMode = ref("replace_month");
@@ -995,6 +1073,13 @@ const translations = {
     actions: "操作",
     ongoing: "持续",
     edit: "编辑",
+    viewDetails: "查看详情",
+    taskDetails: "任务详情",
+    close: "关闭详情",
+    previous: "上一条",
+    next: "下一条",
+    cancel: "取消",
+    discardChanges: "有尚未保存的修改，确定放弃吗？",
     delete: "删除",
     newMember: "新增同事",
     memberFormDescription: "容量以每周小时为基准，安排占用按百分比折算。",
@@ -1216,6 +1301,13 @@ const translations = {
     actions: "Actions",
     ongoing: "Ongoing",
     edit: "Edit",
+    viewDetails: "View details",
+    taskDetails: "Task details",
+    close: "Close details",
+    previous: "Previous",
+    next: "Next",
+    cancel: "Cancel",
+    discardChanges: "Discard your unsaved changes?",
     delete: "Delete",
     newMember: "New Member",
     memberFormDescription: "Capacity is weekly hours, and assignment load is calculated by percentage.",
@@ -1406,6 +1498,9 @@ const filteredLongTermTasks = computed(() => {
     return (!needle || text.includes(needle)) && (!taskStatusFilter.value || item.status === taskStatusFilter.value);
   });
 });
+
+const selectedTask = computed(() => longTermTasks.value.find((item) => item.id === selectedTaskId.value) || null);
+const selectedTaskIndex = computed(() => filteredLongTermTasks.value.findIndex((item) => item.id === selectedTaskId.value));
 
 const taskMetrics = computed(() => {
   const activeTasks = longTermTasks.value.filter((item) => item.status === "active");
@@ -1752,6 +1847,7 @@ async function saveAssignment() {
 
 async function saveLongTermTask() {
   try {
+    const savedTaskId = editingTaskId.value;
     const path = editingTaskId.value ? `/api/tasks/${editingTaskId.value}` : "/api/tasks";
     await request(path, {
       method: editingTaskId.value ? "PUT" : "POST",
@@ -1759,6 +1855,7 @@ async function saveLongTermTask() {
     });
     resetTaskForm();
     await loadData();
+    if (savedTaskId) selectedTaskId.value = savedTaskId;
   } catch (err) {
     showError(err);
   }
@@ -1796,8 +1893,12 @@ function clearAssignmentEndDate() {
 }
 
 function editLongTermTask(item) {
-  editingTaskId.value = item.id;
-  Object.assign(taskForm, {
+  selectedTaskId.value = item.id;
+  startTaskEdit(item);
+}
+
+function taskPayload(item) {
+  return {
     title: item.title,
     owner: item.owner || "",
     category: item.category || "",
@@ -1807,12 +1908,48 @@ function editLongTermTask(item) {
     start_date: item.start_date || "",
     target_date: item.target_date || "",
     notes: item.notes || "",
-  });
-  view.value = "tasks";
+  };
+}
+
+function startTaskEdit(item) {
+  editingTaskId.value = item.id;
+  Object.assign(taskForm, taskPayload(item));
+  taskEditSnapshot.value = JSON.stringify(taskForm);
+}
+
+function taskEditIsDirty() {
+  return editingTaskId.value && JSON.stringify(taskForm) !== taskEditSnapshot.value;
+}
+
+function confirmDiscardTaskEdit() {
+  return !taskEditIsDirty() || window.confirm(t.value.discardChanges);
+}
+
+function openTaskDetails(item) {
+  if (!confirmDiscardTaskEdit()) return;
+  resetTaskForm();
+  selectedTaskId.value = item.id;
+}
+
+function closeTaskDetails() {
+  if (!confirmDiscardTaskEdit()) return;
+  resetTaskForm();
+  selectedTaskId.value = null;
+}
+
+function cancelTaskEdit() {
+  if (!confirmDiscardTaskEdit()) return;
+  resetTaskForm();
+}
+
+function stepTask(offset) {
+  const nextTask = filteredLongTermTasks.value[selectedTaskIndex.value + offset];
+  if (nextTask) openTaskDetails(nextTask);
 }
 
 function resetTaskForm() {
   editingTaskId.value = null;
+  taskEditSnapshot.value = "";
   Object.assign(taskForm, defaultTaskForm());
 }
 
@@ -1834,6 +1971,7 @@ async function removeLongTermTask(id) {
   }
   try {
     await request(`/api/tasks/${id}`, { method: "DELETE" });
+    if (selectedTaskId.value === id) selectedTaskId.value = null;
     await loadData();
   } catch (err) {
     showError(err);
