@@ -1,4 +1,6 @@
 import sqlite3
+import json
+from uuid import uuid4
 from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
@@ -9,8 +11,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import BASE_DIR, get_db, init_db
+from .database import now_iso
 from .excel_import import parse_resource_workbook
+from .sharepoint import preview_excel
 from .schemas import AssignmentIn, LongTermTaskIn, MemberIn, ProjectIn
+from pydantic import BaseModel, Field
 from .services import (
     apply_excel_import,
     build_overview,
@@ -30,7 +35,6 @@ from .services import (
 
 
 app = FastAPI(title="资源安排 API", version="2.0.0")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
@@ -90,6 +94,26 @@ def restore_archived_assignments(month: str):
 def tasks():
     with get_db() as conn:
         return {"tasks": list_long_term_tasks(conn)}
+
+
+@app.post("/api/sharepoint/excel/preview")
+async def preview_sharepoint_excel(request: Request):
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="请先连接 Microsoft 账号")
+    access_token = authorization.removeprefix("Bearer ").strip()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="请先连接 Microsoft 账号")
+    payload = await request.json()
+    share_url = str(payload.get("share_url", "")).strip()
+    if not share_url:
+        raise HTTPException(status_code=400, detail="请输入 SharePoint 分享链接")
+    try:
+        return preview_excel(share_url, access_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"SharePoint 读取失败: {exc}")
 
 
 @app.post("/api/imports/excel/preview")
@@ -208,6 +232,69 @@ def remove_entity(resource: str, entity_id: int):
         deleted = delete_entity(conn, table_name, entity_type, entity_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="记录不存在")
+    return {"ok": True}
+
+
+class SandboxDocument(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    nodes: list[dict] = Field(default_factory=list)
+    edges: list[dict] = Field(default_factory=list)
+    viewport: dict = Field(default_factory=lambda: {"x": 0, "y": 0, "zoom": 1})
+    revision: int = 0
+
+
+@app.get("/api/freeform-sandboxes")
+def list_freeform_sandboxes():
+    with get_db() as conn:
+        return {"sandboxes": [dict(row) for row in conn.execute(
+            "SELECT id, title, revision, updated_at FROM freeform_sandboxes ORDER BY updated_at DESC"
+        ).fetchall()]}
+
+
+@app.post("/api/freeform-sandboxes", status_code=201)
+def create_freeform_sandbox(payload: SandboxDocument):
+    sandbox_id = str(uuid4())
+    document = payload.model_dump(exclude={"revision"})
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO freeform_sandboxes (id, title, document, updated_at) VALUES (?, ?, ?, ?)",
+            (sandbox_id, payload.title, json.dumps(document, ensure_ascii=False), now_iso()),
+        )
+    return {"id": sandbox_id, "revision": 1}
+
+
+@app.get("/api/freeform-sandboxes/{sandbox_id}")
+def get_freeform_sandbox(sandbox_id: str):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT document, revision FROM freeform_sandboxes WHERE id = ?", (sandbox_id,)
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="沙盘不存在")
+    return {**json.loads(row["document"]), "revision": row["revision"]}
+
+
+@app.put("/api/freeform-sandboxes/{sandbox_id}")
+def save_freeform_sandbox(sandbox_id: str, payload: SandboxDocument):
+    document = payload.model_dump(exclude={"revision"})
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE freeform_sandboxes SET title = ?, document = ?, revision = revision + 1, updated_at = ? "
+            "WHERE id = ? AND revision = ?",
+            (payload.title, json.dumps(document, ensure_ascii=False), now_iso(), sandbox_id, payload.revision),
+        )
+        if not cursor.rowcount:
+            exists = conn.execute("SELECT 1 FROM freeform_sandboxes WHERE id = ?", (sandbox_id,)).fetchone()
+            raise HTTPException(status_code=409 if exists else 404, detail="沙盘已被其他窗口修改" if exists else "沙盘不存在")
+    return {"revision": payload.revision + 1}
+
+
+@app.delete("/api/freeform-sandboxes/{sandbox_id}")
+def delete_freeform_sandbox(sandbox_id: str):
+    with get_db() as conn:
+        deleted = conn.execute("DELETE FROM freeform_sandboxes WHERE id = ?", (sandbox_id,))
+    if not deleted.rowcount:
+        raise HTTPException(status_code=404, detail="沙盘不存在")
     return {"ok": True}
 
 

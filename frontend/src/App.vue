@@ -21,6 +21,7 @@
             <button type="button" disabled>容量热力图</button>
             <button type="button" disabled>冲突分析</button>
           </div>
+          <a v-if="item.id === 'sandbox'" class="freeform-entry" href="/free-sandbox">自由沙盘 ↗</a>
         </div>
       </nav>
 
@@ -802,6 +803,49 @@
           </div>
         </section>
       </section>
+
+      <section v-if="view === 'sharepoint'" class="work-view">
+        <section class="form-panel">
+          <div class="section-title compact">
+            <div>
+              <h2>{{ t.sharePointTitle }}</h2>
+              <p>{{ t.sharePointDescription }}</p>
+            </div>
+          </div>
+          <div class="form-actions">
+            <span v-if="sharePointAuth.connected">{{ t.sharePointConnected }}{{ sharePointAuth.account?.username || '' }}</span>
+            <span v-else>{{ sharePointAuth.configured ? t.sharePointNotConnected : t.sharePointNotConfigured }}</span>
+            <button v-if="!sharePointAuth.connected" class="icon-button primary" type="button" :disabled="!sharePointAuth.configured" @click="connectSharePoint">{{ t.sharePointConnect }}</button>
+            <button v-else class="icon-button" type="button" @click="disconnectSharePoint">{{ t.sharePointDisconnect }}</button>
+          </div>
+          <label>
+            <span>{{ t.sharePointLink }}</span>
+            <input v-model.trim="sharePointUrl" type="url" :placeholder="t.sharePointLinkPlaceholder" />
+          </label>
+          <div class="form-actions">
+            <button class="icon-button primary" type="button" :disabled="!sharePointUrl || sharePointLoading" @click="previewSharePointExcel">
+              <FileUp :size="18" />
+              <span>{{ sharePointLoading ? t.importWorking : t.sharePointRead }}</span>
+            </button>
+          </div>
+        </section>
+
+        <section v-if="sharePointPreview" class="section-block">
+          <div class="section-title">
+            <div>
+              <h2>{{ sharePointPreview.filename }}</h2>
+              <p>{{ sharePointPreview.sheet_name }} · {{ sharePointPreview.row_count }} {{ t.sharePointRows }} · {{ sharePointPreview.column_count }} {{ t.sharePointColumns }}</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="preview-table">
+              <tbody>
+                <tr v-for="(row, rowIndex) in sharePointPreview.rows" :key="rowIndex"><td v-for="(cell, columnIndex) in row" :key="columnIndex">{{ cell ?? '' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
     </main>
 
     <div v-if="selectedTask" class="task-drawer-layer" @click.self="closeTaskDetails" @keyup.esc="closeTaskDetails">
@@ -881,6 +925,7 @@ import CalendarRange from "@lucide/vue/dist/esm/icons/calendar-range.mjs";
 import Check from "@lucide/vue/dist/esm/icons/check.mjs";
 import Crosshair from "@lucide/vue/dist/esm/icons/crosshair.mjs";
 import FileUp from "@lucide/vue/dist/esm/icons/file-up.mjs";
+import FolderOpen from "@lucide/vue/dist/esm/icons/folder-open.mjs";
 import FolderKanban from "@lucide/vue/dist/esm/icons/folder-kanban.mjs";
 import FolderPlus from "@lucide/vue/dist/esm/icons/folder-plus.mjs";
 import Gauge from "@lucide/vue/dist/esm/icons/gauge.mjs";
@@ -899,6 +944,13 @@ import Users from "@lucide/vue/dist/esm/icons/users.mjs";
 import X from "@lucide/vue/dist/esm/icons/x.mjs";
 import ResourceSandbox from "./components/ResourceSandbox.vue";
 import CommandSandbox from "./components/CommandSandbox.vue";
+import {
+  currentMicrosoftAccount,
+  microsoftAccessToken,
+  microsoftAuthConfigured,
+  signInMicrosoft,
+  signOutMicrosoft,
+} from "./microsoftAuth";
 
 const today = new Date().toISOString().slice(0, 10);
 const savedLanguage = window.localStorage.getItem("language");
@@ -929,6 +981,11 @@ const assignmentView = ref("current");
 const selectedMonth = ref(today.slice(0, 7));
 const archivedAssignments = ref([]);
 const archiveNotice = ref("");
+const sharePointUrl = ref("");
+const sharePointPreview = ref(null);
+const sharePointLoading = ref(false);
+const sharePointAuth = ref({ configured: false, connected: false, account: null });
+const sharePointPendingUrlKey = "sharepointPendingUrl";
 
 const stats = ref({});
 const members = ref([]);
@@ -959,6 +1016,19 @@ const translations = {
     sandbox: "资源沙盘",
     command: "实验性沙盘",
     imports: "导入",
+    sharePoint: "SharePoint",
+    sharePointTitle: "SharePoint Excel",
+    sharePointDescription: "在后端内存中读取共享 Excel 的前 20 行，不保存文件，也不写入数据库。",
+    sharePointLink: "SharePoint 分享链接",
+    sharePointLinkPlaceholder: "粘贴 .xlsx 的 SharePoint 链接",
+    sharePointRead: "读取 Excel",
+    sharePointRows: "行",
+    sharePointColumns: "列",
+    sharePointConnect: "连接 Microsoft",
+    sharePointDisconnect: "断开连接",
+    sharePointConnected: "已连接：",
+    sharePointNotConnected: "尚未连接 Microsoft",
+    sharePointNotConfigured: "尚未配置 Microsoft 应用",
     dashboardTitle: "资源总览",
     assignmentsTitle: "任务安排",
     membersTitle: "团队同事",
@@ -1187,6 +1257,19 @@ const translations = {
     sandbox: "Resource Sandbox",
     command: "Experimental Sandbox",
     imports: "Import",
+    sharePoint: "SharePoint",
+    sharePointTitle: "SharePoint Excel",
+    sharePointDescription: "Read the first 20 rows of a shared Excel file in backend memory. Nothing is saved or written to the database.",
+    sharePointLink: "SharePoint sharing link",
+    sharePointLinkPlaceholder: "Paste an .xlsx SharePoint link",
+    sharePointRead: "Read Excel",
+    sharePointRows: "rows",
+    sharePointColumns: "columns",
+    sharePointConnect: "Connect Microsoft",
+    sharePointDisconnect: "Disconnect",
+    sharePointConnected: "Connected: ",
+    sharePointNotConnected: "Microsoft is not connected",
+    sharePointNotConfigured: "Microsoft app is not configured",
     dashboardTitle: "Resource Overview",
     assignmentsTitle: "Task Assignments",
     membersTitle: "Team Members",
@@ -1413,6 +1496,7 @@ const navigation = computed(() => [
   { id: "tasks", label: t.value.tasks, icon: ListChecks },
   { id: "sandbox", label: t.value.sandbox, icon: Network },
   { id: "imports", label: t.value.imports, icon: FileUp },
+  { id: "sharepoint", label: t.value.sharePoint, icon: FolderOpen },
 ]);
 
 const memberForm = reactive({
@@ -1448,6 +1532,7 @@ const viewTitle = computed(() => {
     sandbox: t.value.sandboxTitle,
     command: t.value.commandTitle,
     imports: t.value.excelImportTitle,
+    sharepoint: t.value.sharePointTitle,
   }[view.value];
 });
 
@@ -1732,6 +1817,54 @@ function handleImportFile(event) {
   importPreview.value = null;
   importResult.value = null;
   importStatus.value = importFile.value ? { type: "idle", title: t.value.fileReady, detail: importFile.value.name } : null;
+}
+
+async function previewSharePointExcel() {
+  try {
+    sharePointLoading.value = true;
+    const auth = sharePointAuth.value.connected ? sharePointAuth.value : await loadSharePointAuth();
+    if (!auth) return;
+    if (!auth.connected) {
+      window.sessionStorage.setItem(sharePointPendingUrlKey, sharePointUrl.value);
+      await connectSharePoint();
+      return;
+    }
+    const accessToken = await microsoftAccessToken();
+    if (!accessToken) return;
+    sharePointPreview.value = await request("/api/sharepoint/excel/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ share_url: sharePointUrl.value }),
+    }, t.value.sharePointRead);
+  } catch (err) {
+    showError(err, t.value.sharePointRead);
+  } finally {
+    sharePointLoading.value = false;
+  }
+}
+
+async function loadSharePointAuth() {
+  try {
+    const account = await currentMicrosoftAccount();
+    sharePointAuth.value = {
+      configured: microsoftAuthConfigured(),
+      connected: Boolean(account),
+      account: account ? { username: account.username } : null,
+    };
+    return sharePointAuth.value;
+  } catch (err) {
+    showError(err, t.value.sharePointTitle);
+    return null;
+  }
+}
+
+async function connectSharePoint() {
+  if (!microsoftAuthConfigured()) throw new Error(t.value.sharePointNotConfigured);
+  await signInMicrosoft();
+}
+
+async function disconnectSharePoint() {
+  await signOutMicrosoft();
 }
 
 async function previewImport() {
@@ -2024,5 +2157,15 @@ function priorityLabel(value) {
   return t.value.priorities[value] || value;
 }
 
-onMounted(loadData);
+onMounted(async () => {
+  loadData();
+  const auth = await loadSharePointAuth();
+  const pendingUrl = window.sessionStorage.getItem(sharePointPendingUrlKey);
+  if (auth?.connected && pendingUrl) {
+    view.value = "sharepoint";
+    sharePointUrl.value = pendingUrl;
+    window.sessionStorage.removeItem(sharePointPendingUrlKey);
+    await previewSharePointExcel();
+  }
+});
 </script>

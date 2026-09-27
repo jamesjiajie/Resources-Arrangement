@@ -128,6 +128,14 @@ def init_db():
                 summary TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS freeform_sandboxes (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                document TEXT NOT NULL,
+                revision INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         ensure_column(conn, "assignments", "import_batch_id", "INTEGER")

@@ -21,6 +21,20 @@ pip install -r requirements.txt
 npm install
 ```
 
+## SharePoint 登录
+
+用户点击“连接 Microsoft”后会跳转到 Microsoft 登录，并返回当前页面。应用构建者只需在构建时提供一次 Microsoft Entra 应用 ID；最终用户不需要填写配置文件、访问令牌或客户端密钥。
+
+```bash
+VITE_MICROSOFT_CLIENT_ID='Entra 应用 ID' npm run build
+```
+
+在 Entra 应用中把实际访问地址登记为 Single-page application 重定向 URI，例如本机生产启动时使用：
+
+```text
+http://127.0.0.1:8000
+```
+
 ## 开发启动
 
 ```bash

@@ -10,10 +10,10 @@
     "api": ".venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.21.0",
+    "@lucide/vue": "^1.16.0",
     "@vitejs/plugin-vue": "^6.0.3",
     "vite": "^7.3.0",
-    "vue": "^3.5.25",
-    "@lucide/vue": "^1.16.0"
-  },
-  "devDependencies": {}
+    "vue": "^3.5.25"
+  }
 }
