@@ -136,6 +136,23 @@ def init_db():
                 revision INTEGER NOT NULL DEFAULT 1,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS assistant_conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS assistant_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                sources TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(conversation_id) REFERENCES assistant_conversations(id) ON DELETE CASCADE
+            );
             """
         )
         ensure_column(conn, "assignments", "import_batch_id", "INTEGER")

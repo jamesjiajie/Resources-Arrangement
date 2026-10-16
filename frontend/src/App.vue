@@ -351,7 +351,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in filteredAssignments" :key="item.id">
+                <tr v-for="item in filteredAssignments" :id="`assistant-assignment-${item.id}`" :key="item.id">
                   <td>
                     <strong>{{ item.member_name }}</strong>
                     <span>{{ item.member_role }}</span>
@@ -430,7 +430,7 @@
         </form>
 
         <div class="entity-grid">
-          <article v-for="member in members" :key="member.id" class="entity-card">
+          <article v-for="member in members" :id="`assistant-member-${member.id}`" :key="member.id" class="entity-card">
             <div class="entity-head">
               <div>
                 <strong>{{ member.name }}</strong>
@@ -504,7 +504,7 @@
         </form>
 
         <div class="entity-grid">
-          <article v-for="project in projects" :key="project.id" class="entity-card">
+          <article v-for="project in projects" :id="`assistant-project-${project.id}`" :key="project.id" class="entity-card">
             <div class="entity-head">
               <div>
                 <strong>{{ project.name }}</strong>
@@ -556,6 +556,7 @@
                 <option value="done">{{ t.done }}</option>
                 <option value="archived">{{ t.archived }}</option>
               </select>
+
             </label>
             <label>
               <span>{{ t.priority }}</span>
@@ -605,16 +606,23 @@
                 <Search :size="17" />
                 <input v-model.trim="taskSearch" :placeholder="t.taskSearchPlaceholder" />
               </div>
-              <select v-model="taskStatusFilter">
+              <select v-if="taskView === 'current'" v-model="taskStatusFilter" :aria-label="t.status">
                 <option value="">{{ t.allStatuses }}</option>
                 <option value="planned">{{ t.planned }}</option>
                 <option value="active">{{ t.active }}</option>
                 <option value="blocked">{{ t.blocked }}</option>
-                <option value="done">{{ t.done }}</option>
-                <option value="archived">{{ t.archived }}</option>
               </select>
+              <label v-else class="task-archive-toggle"><input v-model="includeArchivedTasks" type="checkbox" />{{ t.includeArchivedTasks }}</label>
             </div>
           </div>
+
+          <div class="archive-toolbar">
+            <div class="view-tabs" :aria-label="t.longTermTaskList">
+              <button type="button" :class="{ active: taskView === 'current' }" :aria-pressed="taskView === 'current'" @click="switchTaskView('current')">{{ t.active }} ({{ currentTaskCount }})</button>
+              <button type="button" :class="{ active: taskView === 'completed' }" :aria-pressed="taskView === 'completed'" @click="switchTaskView('completed')">{{ t.longTermDoneMetric }} ({{ completedTaskCount }})</button>
+            </div>
+          </div>
+          <p v-if="taskNotice" class="archive-notice" role="status">{{ taskNotice }}</p>
 
           <div class="table-wrap">
             <table>
@@ -633,8 +641,9 @@
                 <tr
                   v-for="item in filteredLongTermTasks"
                   :key="item.id"
+                  :id="`assistant-task-${item.id}`"
                   class="task-row"
-                  :class="{ selected: selectedTaskId === item.id }"
+                  :class="{ selected: selectedTaskId === item.id, 'task-history-row': taskView === 'completed' }"
                   tabindex="0"
                   :aria-label="`${t.viewDetails}: ${item.title}`"
                   @click="openTaskDetails(item)"
@@ -663,7 +672,7 @@
                       <button class="square-button" type="button" :title="t.edit" @click.stop="editLongTermTask(item)">
                         <Pencil :size="17" />
                       </button>
-                      <button class="square-button" type="button" :title="t.markDone" @click.stop="completeLongTermTask(item)">
+                      <button v-if="!['done', 'archived'].includes(item.status)" class="square-button" type="button" :title="t.markDone" @click.stop="completeLongTermTask(item)">
                         <Check :size="17" />
                       </button>
                       <button class="square-button danger" type="button" :title="t.delete" @click.stop="removeLongTermTask(item.id)">
@@ -672,6 +681,7 @@
                     </div>
                   </td>
                 </tr>
+                <tr v-if="!filteredLongTermTasks.length"><td colspan="7" class="empty-cell">{{ taskSearch || taskStatusFilter ? t.noMatchingTasks : taskView === 'current' ? t.noCurrentTasks : t.noCompletedTasks }}</td></tr>
               </tbody>
             </table>
           </div>
@@ -848,6 +858,8 @@
       </section>
     </main>
 
+    <AIAssistant :language="language" :context="`${viewTitle || view} · ${currentDate}`" :members="members" :projects="projects" @navigate="navigateAssistantSource" />
+
     <div v-if="selectedTask" class="task-drawer-layer" @click.self="closeTaskDetails" @keyup.esc="closeTaskDetails">
       <aside class="task-drawer" role="dialog" aria-modal="true" :aria-labelledby="`task-detail-${selectedTask.id}`" tabindex="-1" autofocus>
         <header class="task-drawer-header">
@@ -906,7 +918,7 @@
             <button class="icon-button" type="button" :disabled="selectedTaskIndex >= filteredLongTermTasks.length - 1" @click="stepTask(1)">{{ t.next }}</button>
           </div>
           <div class="task-primary-actions">
-            <button v-if="selectedTask.status !== 'done'" class="icon-button" type="button" @click="completeLongTermTask(selectedTask)"><Check :size="17" />{{ t.markDone }}</button>
+            <button v-if="!['done', 'archived'].includes(selectedTask.status)" class="icon-button" type="button" @click="completeLongTermTask(selectedTask)"><Check :size="17" />{{ t.markDone }}</button>
             <button class="icon-button primary" type="button" @click="startTaskEdit(selectedTask)"><Pencil :size="17" />{{ t.edit }}</button>
           </div>
         </footer>
@@ -916,7 +928,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref } from "vue";
 import AlertTriangle from "@lucide/vue/dist/esm/icons/triangle-alert.mjs";
 import Archive from "@lucide/vue/dist/esm/icons/archive.mjs";
 import BarChart3 from "@lucide/vue/dist/esm/icons/chart-bar.mjs";
@@ -944,6 +956,7 @@ import Users from "@lucide/vue/dist/esm/icons/users.mjs";
 import X from "@lucide/vue/dist/esm/icons/x.mjs";
 import ResourceSandbox from "./components/ResourceSandbox.vue";
 import CommandSandbox from "./components/CommandSandbox.vue";
+import AIAssistant from "./components/AIAssistant.vue";
 import {
   currentMicrosoftAccount,
   microsoftAccessToken,
@@ -967,6 +980,9 @@ const search = ref("");
 const statusFilter = ref("");
 const taskSearch = ref("");
 const taskStatusFilter = ref("");
+const taskView = ref("current");
+const includeArchivedTasks = ref(false);
+const taskNotice = ref("");
 const selectedTaskId = ref(null);
 const editingAssignmentId = ref(null);
 const editingTaskId = ref(null);
@@ -1180,6 +1196,11 @@ const translations = {
     longTermTaskFormDescription: "跟踪跨周或跨月推进的事项，不计入短期资源占用。",
     longTermTaskList: "长期任务列表",
     longTermTaskListDescription: "按状态、负责人、分类和标题查找长期事项。",
+    includeArchivedTasks: "包含已归档",
+    noMatchingTasks: "没有符合筛选条件的任务",
+    noCurrentTasks: "暂无进行中的任务",
+    noCompletedTasks: "暂无已完成的任务",
+    taskCompletedNotice: "任务已完成，可在已完成中查看。",
     taskSearchPlaceholder: "搜索任务、负责人、分类",
     markDone: "标记完成",
     longTermActiveMetric: "进行中任务",
@@ -1421,6 +1442,11 @@ const translations = {
     longTermTaskFormDescription: "Track work that runs across weeks or months without adding short-term allocation.",
     longTermTaskList: "Long-Term Task List",
     longTermTaskListDescription: "Find long-running work by status, owner, category, or title.",
+    includeArchivedTasks: "Include archived",
+    noMatchingTasks: "No tasks match your filters",
+    noCurrentTasks: "No tasks in progress",
+    noCompletedTasks: "No completed tasks yet",
+    taskCompletedNotice: "Task completed. View it in Completed.",
     taskSearchPlaceholder: "Search task, owner, category",
     markDone: "Mark Done",
     longTermActiveMetric: "Active Tasks",
@@ -1576,11 +1602,25 @@ const availableMonths = computed(() => {
   return [...new Set(source.map((item) => assignmentView.value === "archived" ? item.archived_month : item.start_date.slice(0, 7)).filter(Boolean))].sort().reverse();
 });
 
+const currentTaskCount = computed(() => longTermTasks.value.filter(item => !["done", "archived"].includes(item.status)).length);
+const completedTaskCount = computed(() => longTermTasks.value.filter(item => item.status === "done" || (includeArchivedTasks.value && item.status === "archived")).length);
+
+function switchTaskView(value) {
+  if (!confirmDiscardTaskEdit()) return;
+  resetTaskForm();
+  selectedTaskId.value = null;
+  taskStatusFilter.value = "";
+  taskView.value = value;
+}
+
 const filteredLongTermTasks = computed(() => {
   const needle = taskSearch.value.toLowerCase();
   return longTermTasks.value.filter((item) => {
     const text = `${item.title} ${item.owner} ${item.category} ${item.notes}`.toLowerCase();
-    return (!needle || text.includes(needle)) && (!taskStatusFilter.value || item.status === taskStatusFilter.value);
+    const inView = taskView.value === "current"
+      ? !["done", "archived"].includes(item.status)
+      : item.status === "done" || (includeArchivedTasks.value && item.status === "archived");
+    return inView && (!needle || text.includes(needle)) && (taskView.value !== "current" || !taskStatusFilter.value || item.status === taskStatusFilter.value);
   });
 });
 
@@ -1719,6 +1759,33 @@ function toggleLanguage() {
 function setCommandDate(value) {
   currentDate.value = value;
   loadData();
+}
+
+async function navigateAssistantSource(source) {
+  if (source.kind === "sandbox") {
+    window.location.href = `/free-sandbox/${encodeURIComponent(source.id)}`;
+    return;
+  }
+  if (source.kind === "assignment") {
+    const item = [...assignments.value, ...archivedAssignments.value].find(row => String(row.id) === String(source.id));
+    assignmentView.value = item?.archived_month ? "archived" : "current";
+    selectedMonth.value = item?.archived_month || item?.start_date?.slice(0, 7) || "";
+    search.value = "";
+    statusFilter.value = "";
+  }
+  if (source.kind === "task") {
+    const item = longTermTasks.value.find(row => String(row.id) === String(source.id));
+    if (!confirmDiscardTaskEdit()) return;
+    resetTaskForm();
+    taskView.value = ["done", "archived"].includes(item?.status) ? "completed" : "current";
+    includeArchivedTasks.value = item?.status === "archived";
+    taskSearch.value = "";
+    taskStatusFilter.value = "";
+  }
+  view.value = ({ member: "members", project: "projects", assignment: "assignments", task: "tasks", import: "imports", activity: "dashboard" })[source.kind] || "dashboard";
+  await nextTick();
+  document.getElementById(`assistant-${source.kind}-${source.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (source.kind === "task") selectedTaskId.value = Number(source.id);
 }
 
 function errorMessage(detail) {
@@ -1988,7 +2055,7 @@ async function saveLongTermTask() {
     });
     resetTaskForm();
     await loadData();
-    if (savedTaskId) selectedTaskId.value = savedTaskId;
+    if (savedTaskId) selectedTaskId.value = filteredLongTermTasks.value.some(item => item.id === savedTaskId) ? savedTaskId : null;
   } catch (err) {
     showError(err);
   }
@@ -2093,6 +2160,8 @@ async function completeLongTermTask(item) {
       body: JSON.stringify({ ...item, status: "done", progress: 100 }),
     });
     await loadData();
+    if (selectedTaskId.value === item.id) selectedTaskId.value = null;
+    taskNotice.value = t.value.taskCompletedNotice;
   } catch (err) {
     showError(err);
   }

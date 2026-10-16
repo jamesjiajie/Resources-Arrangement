@@ -35,6 +35,10 @@ VITE_MICROSOFT_CLIENT_ID='Entra 应用 ID' npm run build
 http://127.0.0.1:8000
 ```
 
+## AI 助手
+
+在项目根目录的 `.env` 中填写 `AGNES_API_KEY=你的密钥`，然后启动或重启服务，即可在页面右下角使用 AI 助手。也可以使用同名服务端环境变量覆盖文件配置。`.env` 已被 Git 忽略，密钥不会发送到浏览器。助手使用 Agnes 3.0 Flash 查询已保存的 portal 资料，按工作日计算下月人员余量；对话记录保存在本机 SQLite。SharePoint 的临时预览不属于已保存资料，不会被助手读取。
+
 ## 开发启动
 
 ```bash

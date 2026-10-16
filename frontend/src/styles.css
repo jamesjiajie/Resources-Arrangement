@@ -1219,3 +1219,7 @@ td span {
   }
 }
 .freeform-entry{display:block;margin:4px 10px 8px 46px;color:#5575a2;font-size:13px;text-decoration:none}.freeform-entry:hover{color:#2275d9;text-decoration:underline}
+
+.task-archive-toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.task-archive-toggle input { width: auto; }
+.task-history-row .task-title-button { color: var(--muted); }

@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import os
 from uuid import uuid4
 from pathlib import Path
 from typing import Optional
@@ -7,11 +8,12 @@ from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import BASE_DIR, get_db, init_db
 from .database import now_iso
+from .assistant import answer_stream, get_record
 from .excel_import import parse_resource_workbook
 from .sharepoint import preview_excel
 from .schemas import AssignmentIn, LongTermTaskIn, MemberIn, ProjectIn
@@ -34,6 +36,15 @@ from .services import (
 )
 
 
+env_file = BASE_DIR / ".env"
+if env_file.exists() and not os.environ.get("AGNES_API_KEY"):
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name.strip() == "AGNES_API_KEY":
+            os.environ["AGNES_API_KEY"] = value.strip().strip("\"'")
+            break
+
+
 app = FastAPI(title="资源安排 API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -52,6 +63,89 @@ def on_startup():
 @app.get("/api/health")
 def health():
     return {"ok": True, "version": "2.0.0"}
+
+
+@app.get("/api/assistant/conversations")
+def assistant_conversations():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM assistant_conversations ORDER BY updated_at DESC").fetchall()
+    return {"configured": bool(os.environ.get("AGNES_API_KEY", "").strip()), "conversations": [dict(row) for row in rows]}
+
+
+@app.get("/api/assistant/sources/{kind}/{record_id}")
+def assistant_source(kind: str, record_id: str):
+    with get_db() as conn:
+        result = get_record(conn, kind, record_id, [])
+    if "error" in result:
+        raise HTTPException(status_code=404, detail="资料不存在")
+    return {"record": json.loads(result["record"]) if not result["truncated"] else result["record"], "truncated": result["truncated"]}
+
+
+@app.post("/api/assistant/conversations", status_code=201)
+def create_assistant_conversation():
+    conversation_id = str(uuid4())
+    with get_db() as conn:
+        conn.execute("INSERT INTO assistant_conversations VALUES (?, ?, ?, ?)",
+                     (conversation_id, "新对话", now_iso(), now_iso()))
+    return {"id": conversation_id}
+
+
+@app.get("/api/assistant/conversations/{conversation_id}")
+def assistant_conversation(conversation_id: str):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM assistant_conversations WHERE id = ?", (conversation_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        messages = conn.execute("SELECT role, content, sources, created_at FROM assistant_messages WHERE conversation_id = ? ORDER BY id", (conversation_id,)).fetchall()
+    return {"conversation": dict(row), "messages": [{**dict(item), "sources": json.loads(item["sources"])} for item in messages]}
+
+
+@app.delete("/api/assistant/conversations/{conversation_id}")
+def delete_assistant_conversation(conversation_id: str):
+    with get_db() as conn:
+        deleted = conn.execute("DELETE FROM assistant_conversations WHERE id = ?", (conversation_id,))
+    if not deleted.rowcount:
+        raise HTTPException(status_code=404, detail="对话不存在")
+    return {"ok": True}
+
+
+class AssistantQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    page_context: str = Field(default="总览", max_length=200)
+
+
+@app.post("/api/assistant/conversations/{conversation_id}/messages")
+def ask_assistant(conversation_id: str, payload: AssistantQuestion):
+    if not os.environ.get("AGNES_API_KEY", "").strip():
+        raise HTTPException(status_code=503, detail="尚未配置 AGNES_API_KEY；请在启动 portal 的服务端环境中设置。")
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="请输入问题")
+    with get_db() as conn:
+        row = conn.execute("SELECT 1 FROM assistant_conversations WHERE id = ?", (conversation_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        history = [dict(item) for item in conn.execute(
+            "SELECT role, content FROM assistant_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 8", (conversation_id,)).fetchall()][::-1]
+        last = conn.execute("SELECT role, content FROM assistant_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 1", (conversation_id,)).fetchone()
+        if last is None or last["role"] != "user" or last["content"] != question:
+            conn.execute("INSERT INTO assistant_messages (conversation_id, role, content, created_at) VALUES (?, 'user', ?, ?)",
+                         (conversation_id, question, now_iso()))
+        conn.execute("UPDATE assistant_conversations SET title = CASE WHEN title = '新对话' THEN ? ELSE title END, updated_at = ? WHERE id = ?",
+                     (question[:36], now_iso(), conversation_id))
+
+    def events():
+        try:
+            for event in answer_stream(get_db, history, question, payload.page_context):
+                if event["type"] == "done":
+                    with get_db() as conn:
+                        conn.execute("INSERT INTO assistant_messages (conversation_id, role, content, sources, created_at) VALUES (?, 'assistant', ?, ?, ?)",
+                                     (conversation_id, event["text"], json.dumps(event["sources"], ensure_ascii=False), now_iso()))
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/overview")
